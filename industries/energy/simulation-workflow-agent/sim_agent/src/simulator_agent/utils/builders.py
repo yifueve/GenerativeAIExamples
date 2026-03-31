@@ -119,6 +119,8 @@ _TOOL_INPUT_BUILDERS: dict[str, Callable[[str, list[str]], dict[str, Any]]] = {
     "modify_simulation_input_file": _build_modify_input,
     "simulator_manual": _build_rag_input,
     "simulator_examples": _build_rag_input,
+    "tracelink_docs": _build_rag_input,
+    "dscsa_regulations": _build_rag_input,
     PLOT_SUMMARY_TOOL: _build_plot_input,
     PLOT_COMPARE_TOOL: _build_plot_input,
     "run_flow_diagnostics": _build_run_flow_diagnostics_input,
@@ -139,6 +141,6 @@ def build_tool_input_for_step(
     if not builder:
         return {}
     tool_input = builder(sub_query, preferred)
-    if tool_name in ("simulator_manual", "simulator_examples") and tool_input:
+    if tool_name in ("simulator_manual", "simulator_examples", "tracelink_docs", "dscsa_regulations") and tool_input:
         tool_input["collection_name"] = tool_name
     return tool_input

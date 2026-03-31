@@ -32,11 +32,11 @@ def valid_data_file_path(path_or_name: str, uploaded_files: list[str]) -> tuple[
     if not (path_or_name or "").strip():
         return False, "No file path provided."
     s = path_or_name.strip()
-    if not s.upper().endswith(".DATA"):
+    if not (s.upper().endswith(".DATA") or s.lower().endswith(".yaml") or s.lower().endswith(".yml")):
         return False, (
-            "run_and_heal requires a simulator primary input file with extension .DATA. "
-            "You provided a file that does not end with .DATA (e.g. .pdf is not supported). "
-            "Please upload a valid simulator input file (.DATA)."
+            "run_and_heal requires a scenario config file (.yaml) or simulator input file (.DATA). "
+            "You provided a file that does not end with .yaml/.DATA (e.g. .pdf is not supported). "
+            "Please upload a valid scenario config (.yaml) or simulator input file (.DATA)."
         )
     p = Path(s)
     if p.exists():
@@ -44,9 +44,11 @@ def valid_data_file_path(path_or_name: str, uploaded_files: list[str]) -> tuple[
     for u in (uploaded_files or []):
         if u and Path(u).name == Path(s).name:
             return True, None
-        if u and u.strip().upper().endswith(".DATA") and (s in u or Path(u).name == s):
+        sl = s.lower()
+        ul = (u or "").strip().lower()
+        if u and (ul.endswith(".data") or ul.endswith(".yaml") or ul.endswith(".yml")) and (s in u or Path(u).name == s):
             return True, None
-    return False, (f"Simulator input file not found: {s}. Please upload the file or provide a valid path.")
+    return False, (f"Scenario config or simulator input file not found: {s}. Please upload the file or provide a valid path.")
 
 
 def _validate_run_and_heal(state: GlobalState, tool_input: dict) -> tuple[bool, Optional[str]]:
@@ -54,21 +56,22 @@ def _validate_run_and_heal(state: GlobalState, tool_input: dict) -> tuple[bool, 
     data_file = (tool_input.get("data_file") or "").strip()
     if not data_file and uploaded:
         for u in uploaded:
-            if (u or "").strip().upper().endswith(".DATA"):
+            ul = (u or "").strip().lower()
+            if ul.endswith(".data") or ul.endswith(".yaml") or ul.endswith(".yml"):
                 tool_input["data_file"] = u.strip()
                 data_file = u.strip()
                 break
     if not data_file:
         return False, (
-            "To run the simulation, please upload a simulator primary input file (extension .DATA). "
-            "No simulator input file was provided or identified in your request."
+            "To run the scenario, please upload a supply chain scenario config (.yaml) "
+            "or simulator input file (.DATA). No valid input file was provided or identified."
         )
     return valid_data_file_path(data_file, uploaded)
 
 
 def _validate_rag(state: GlobalState, tool_input: dict) -> tuple[bool, Optional[str]]:
     user_input = (state.get("user_input") or state.get("input") or "").strip()
-    tool_input["query"] = (tool_input.get("query") or user_input or "OPM documentation").strip()
+    tool_input["query"] = (tool_input.get("query") or user_input or "TraceLink supply chain documentation").strip()
     return True, None
 
 
@@ -197,13 +200,8 @@ def _validate_run_flow_diagnostics(state: GlobalState, tool_input: dict) -> tupl
         case_path = tool_input["case_path"]
     if not case_path:
         return False, (
-            "Flow diagnostics requires a .DATA file path. "
-            "Please upload a .DATA file or provide case_path."
-        )
-    if not case_path.upper().endswith(".DATA"):
-        return False, (
-            "Flow diagnostics requires a simulator input file with .DATA extension. "
-            "The simulation must have been run with RPTRST FLOWS."
+            "Network diagnostics requires a scenario config path (.yaml) or results JSON path. "
+            "Please upload a .yaml scenario file or provide case_path."
         )
     return True, None
 
@@ -214,6 +212,8 @@ TOOL_VALIDATORS: dict[str, _ValidatorFn] = {
     "run_and_heal": _validate_run_and_heal,
     "simulator_manual": _validate_rag,
     "simulator_examples": _validate_rag,
+    "tracelink_docs": _validate_rag,
+    "dscsa_regulations": _validate_rag,
     PLOT_SUMMARY_TOOL: _validate_plot_summary,
     PLOT_COMPARE_TOOL: _validate_plot_compare_full,
     "run_flow_diagnostics": _validate_run_flow_diagnostics,
@@ -237,7 +237,7 @@ def validate_args_and_get_update(state: GlobalState) -> tuple[bool, Optional[str
         valid, err = validator(state, tool_input)
         if not valid:
             return False, err, routing
-        if tool_name in ("simulator_manual", "simulator_examples"):
+        if tool_name in ("simulator_manual", "simulator_examples", "tracelink_docs", "dscsa_regulations"):
             tool_input["collection_name"] = tool_name
         routing[-1] = {**r, "tool_input": tool_input}
         return True, None, routing

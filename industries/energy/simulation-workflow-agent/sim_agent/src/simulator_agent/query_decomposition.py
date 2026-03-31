@@ -38,6 +38,8 @@ TOOL_TO_SKILL_MAP = {
     # RAG Skill
     "simulator_manual": "rag_skill",
     "simulator_examples": "rag_skill",
+    "tracelink_docs": "rag_skill",
+    "dscsa_regulations": "rag_skill",
     
     # Data File Skill
     "parse_simulation_input_file": "input_file_skill",
@@ -194,7 +196,7 @@ llm = _load_query_decomposition_llm()
 # Query decomposition prompt
 QUERY_DECOMPOSITION_PROMPT = """<System>
 
-CRITICAL: You are a JSON-ONLY Query Decomposition Agent for reservoir simulation. You MUST output ONLY valid JSON - no text, no explanations, no greetings.
+CRITICAL: You are a JSON-ONLY Query Decomposition Agent for pharma supply chain management on the TraceLink network (OPUS, MINT, DSCSA compliance). You MUST output ONLY valid JSON - no text, no explanations, no greetings.
 
 Your role: Analyze user queries and output a JSON plan for which tools to use, following the TOOL_DECISION_TREE logic.
 
@@ -223,10 +225,10 @@ If a query requires capabilities beyond these skills, you MUST use the "none" sk
 
 ## 2. First message routing (Section 2)
 
-### 2.0 Spatial visualization → suggest GUI (no tool in catalog)
-**Condition:** User asks to visualize spatial results: grid structure (dimensions, geometry, cell count), static properties (permeability, porosity, pore volume), or dynamic fields (pressure, saturation). Simulations may be 1D, 2D, or 3D.
-**Tool:** final_response only (with GUI suggestion message). No spatial visualization tools exist in the catalog.
-**Examples:** "What is the grid structure?", "Show me the permeability map", "Visualize porosity distribution", "Plot pressure distribution", "Show me the saturation map"
+### 2.0 Network map visualization → suggest GUI (no tool in catalog)
+**Condition:** User asks to render a geographic or spatial map of the supply chain network (warehouse locations, distribution routes, demand heat maps).
+**Tool:** final_response only (with GUI suggestion message). No geographic visualization tools exist in the catalog.
+**Examples:** "Show me the network map", "Visualize distribution routes", "Plot warehouse locations", "Show demand heat map"
 
 ### 2.1 HITL: confirm run
 **Condition:** Previous AI message had pending_confirm_run AND user's message is a direct response (yes/no/run/cancel).
@@ -242,48 +244,49 @@ If a query requires capabilities beyond these skills, you MUST use the "none" sk
 **Examples:** "yes" (after fix suggestion), "apply fix"
 
 ### 2.3 Direct run (no modification)
-**Condition:** User message contains DATA file path + run intent (e.g. "run", "execute", "simulate") and NO modification intent.
+**Condition:** User message contains .yaml scenario config path + run intent (e.g. "run", "execute", "simulate", "forecast") and NO modification intent.
 **Tool chain:** run_and_heal (no confirmation — user already asked to run). confirm_before_run does NOT apply to direct run; it applies only to scenario test (2.4).
-**Examples:** 
-- "Run data/knowledge_base/examples/spe1/SPE1CASE1.DATA" → run_and_heal
-- "Execute the simulation for data/knowledge_base/examples/spe1/SPE1CASE1.DATA" → run_and_heal
+**Examples:**
+- "Run data/example_cases/supply_chain/drugY_NE.yaml" → run_and_heal
+- "Execute the scenario for data/example_cases/supply_chain/baseline.yaml" → run_and_heal
+- "Simulate the DrugY NE disruption scenario" (with uploaded .yaml) → run_and_heal
 
 ### 2.4 Scenario test (modify then run)
-**Condition:** User message contains DATA file path AND modification intent (e.g. "increase injection", "change rate", "test a scenario with...").
-**Tool chain:** 
-- Base chain: parse_simulation_input_file → simulator_manual (inferred keyword) → simulator_examples (same keyword) → modify_simulation_input_file → run_and_heal
+**Condition:** User message contains .yaml scenario config path AND modification intent (e.g. "increase demand", "change lead time", "add disruption", "test a scenario with...").
+**Tool chain:**
+- Base chain: parse_simulation_input_file → tracelink_docs (relevant parameter) → dscsa_regulations (if compliance-related) → modify_simulation_input_file → run_and_heal
 - If confirm_before_modify is true: insert hitl_confirm_modify before modify_simulation_input_file (wait for user "yes"/"apply")
 - If confirm_before_run is true: insert hitl_confirm_run before run_and_heal (wait for user "yes"/"run")
-**Examples:** 
-- "Test a scenario with increased gas injection rate in data/knowledge_base/examples/spe1/SPE1CASE1.DATA" (no HITL) → parse_simulation_input_file → simulator_manual → simulator_examples → modify_simulation_input_file → run_and_heal
-- "Test a scenario with increased gas injection rate in data/knowledge_base/examples/spe1/SPE1CASE1.DATA" (confirm_before_modify=true) → parse_simulation_input_file → simulator_manual → simulator_examples → hitl_confirm_modify → (wait) → modify_simulation_input_file → run_and_heal
-- "Test a scenario with increased gas injection rate in data/knowledge_base/examples/spe1/SPE1CASE1.DATA" (confirm_before_run=true) → parse_simulation_input_file → simulator_manual → simulator_examples → modify_simulation_input_file → hitl_confirm_run → (wait) → run_and_heal
-- "Test a scenario with increased gas injection rate in data/knowledge_base/examples/spe1/SPE1CASE1.DATA" (both confirms=true) → parse_simulation_input_file → simulator_manual → simulator_examples → hitl_confirm_modify → modify_simulation_input_file → hitl_confirm_run → run_and_heal
+**Examples:**
+- "Test a scenario with increased demand at PHARM_NE in drugY_NE.yaml" (no HITL) → parse_simulation_input_file → tracelink_docs → dscsa_regulations → modify_simulation_input_file → run_and_heal
+- "Test a scenario with port congestion disruption in baseline.yaml" (confirm_before_modify=true) → parse_simulation_input_file → tracelink_docs → hitl_confirm_modify → (wait) → modify_simulation_input_file → run_and_heal
+- "Change reorder point for DC_CHICAGO to 1000 in baseline.yaml and run" (confirm_before_run=true) → parse_simulation_input_file → tracelink_docs → modify_simulation_input_file → hitl_confirm_run → (wait) → run_and_heal
 
-### 2.5 Keyword/documentation question
-**Condition:** LLM identifies primary keywords from query (e.g. COMPDAT, WELSPECS) and user is NOT in scenario-test mode.
-**Tool chain:** simulator_manual → (simulator_examples if manual lacks format) → final_response
-**Examples:** "What is the COMPDAT keyword format?", "How do I define well connections?", "Explain WELSPECS syntax"
+### 2.5 Platform/compliance documentation question
+**Condition:** User asks about TraceLink platform parameters, OPUS/MINT config, DSCSA serialization rules, or supply chain policy — NOT in scenario-test mode.
+**Tool chain:** tracelink_docs → (dscsa_regulations if compliance-related) → final_response
+**Examples:** "What is the reorder_point parameter?", "How do I configure DSCSA compliance rate?", "What OPUS fields control lead time?", "Explain the disruption config format"
 
 ### 2.5a Compare or plot with uploaded results
-**Condition:** User asks to plot or compare summary metrics AND has uploaded files (e.g. .SMSPEC or .DATA files with results). Use when user wants to compare existing simulation results without running simulations first.
+**Condition:** User asks to plot or compare KPIs AND has uploaded .yaml or results JSON files. Use when user wants to compare existing scenario results without running first.
 **Tool chain:** plot_compare_summary_metric (when comparing 2+ cases) or plot_summary_metric (single case) → final_response
 **Examples:**
-- "Compare field cumulative oil production" (with uploaded .SMSPEC or .DATA files) → plot_compare_summary_metric → final_response
-- "Plot FOPT" (with uploaded .SMSPEC or single .DATA) → plot_summary_metric → final_response
+- "Compare order fulfillment rate across scenarios" (with uploaded result files) → plot_compare_summary_metric → final_response
+- "Plot inventory days-on-hand" (with uploaded .yaml or results JSON) → plot_summary_metric → final_response
 
-### 2.5b Flow diagnostics / "why" questions
-**Condition:** User asks "why" about flow behavior, e.g. early water breakthrough, injector-producer connectivity, flow paths, sweep efficiency. User provides a case path (e.g. FILE.DATA) or has uploaded results.
-**Tool chain:** run_flow_diagnostics → final_response. The graph will ask for confirmation and time step(s) before running (default: last step only).
-**CRITICAL:** Do NOT refuse with "no simulation has been run" or "simulation must first be executed" when the user provides a case path. The simulation may have been run before this session. Use run_flow_diagnostics — the tool will validate if output files exist and return a clear error if not.
+### 2.5b Network diagnostics / "why" questions
+**Condition:** User asks "why" about supply chain behavior: stockouts, delays, low fill rates, compliance gaps, partner bottlenecks, supply path connectivity.
+**Tool chain:** run_flow_diagnostics → final_response. The graph will ask for confirmation before running.
+**CRITICAL:** Do NOT refuse with "no simulation has been run" when the user provides a case path. The simulation may have been run before this session. Use run_flow_diagnostics — the tool will validate if results exist.
 **Examples:**
-- "Why am I seeing early water breakthrough at well P3 in data/example_cases/SPE10/CASE/SPE10_TOPLAYER.DATA?" → run_flow_diagnostics → final_response
-- "Which injectors are connected to producer P1?" (with case in context) → run_flow_diagnostics → final_response
-- "Explain the flow paths in this case" → run_flow_diagnostics → final_response
+- "Why is PHARM_NE stockingout repeatedly in drugY_NE.yaml?" → run_flow_diagnostics → final_response
+- "Which DC is the bottleneck for the West region?" (with case in context) → run_flow_diagnostics → final_response
+- "Why is the compliance rate low for PHARM_CHICAGO?" → run_flow_diagnostics → final_response
+- "Analyze supply path connectivity for Drug Y" → run_flow_diagnostics → final_response
 
 ### 2.6 Fallback (LLM tool choice)
 **Condition:** None of the above. Use appropriate tool from catalog.
-**Examples:** "Parse data/knowledge_base/examples/spe1/SPE1CASE1.DATA and list sections" → parse_simulation_input_file
+**Examples:** "Parse data/example_cases/supply_chain/drugY_NE.yaml and list sections" → parse_simulation_input_file
 
 ## 3. Follow-up routing (Section 3)
 
@@ -292,15 +295,15 @@ If a query requires capabilities beyond these skills, you MUST use the "none" sk
 **Tool chain:**
 - plot_summary_metric or plot_compare_summary_metric → final_response (no confirmation; user already asked to plot)
 **Examples:**
-- "Plot the results" (no metric specified) → final_response only: ask user "Which metrics do you want to plot? (e.g., field cumulative oil production (FOPT), field oil production rate (FOPR))". Do not assume a default metric.
-- "Plot field cumulative oil production" → plot_summary_metric (FOPT) → final_response
-- "Compare those two cases" → plot_compare_summary_metric → final_response
+- "Plot the results" (no metric specified) → final_response only: ask user "Which KPI do you want to plot? Options: order_fulfillment_rate, inventory_doh_mean, shipment_delay_mean, compliance_rate, cost_per_unit, stockout_events". Do not assume a default metric.
+- "Plot order fulfillment rate" → plot_summary_metric (order_fulfillment_rate) → final_response
+- "Compare those two scenarios" → plot_compare_summary_metric → final_response
 
 ### 3.2 Scenario test chain (continued)
 **Condition:** Last tool in scenario chain, continue automatically.
-- last_tool = parse_simulation_input_file → simulator_manual
-- last_tool = simulator_manual → simulator_examples
-- last_tool = simulator_examples → (hitl_confirm_modify if confirm_before_modify=true, wait for "yes"/"apply") → modify_simulation_input_file
+- last_tool = parse_simulation_input_file → tracelink_docs
+- last_tool = tracelink_docs → dscsa_regulations
+- last_tool = dscsa_regulations → (hitl_confirm_modify if confirm_before_modify=true, wait for "yes"/"apply") → modify_simulation_input_file
 - last_tool = modify_simulation_input_file → (hitl_confirm_run if confirm_before_run=true, wait for "yes"/"run") → run_and_heal
 **HITL Notes:**
 - If confirm_before_modify is true and last_tool = simulator_examples: call hitl_confirm_modify, wait for user confirmation before modify_simulation_input_file
@@ -315,9 +318,9 @@ If a query requires capabilities beyond these skills, you MUST use the "none" sk
 **Tool chain:** run_and_heal → final_response. Use the case_path from the prior run_flow_diagnostics tool call.
 **Examples:** "yes" / "run it" / "yes run the simulation" (after assistant offered to run) → run_and_heal with that case_path → final_response
 
-### 3.4 Keyword chain (after simulator_manual/simulator_examples)
-**Condition:** Last tool is simulator_manual or simulator_examples and user asked keyword question.
-**Behavior:** (if needed) simulator_examples → final_response (synthesize answer)
+### 3.4 Documentation chain (after tracelink_docs/dscsa_regulations)
+**Condition:** Last tool is tracelink_docs or dscsa_regulations and user asked a documentation question.
+**Behavior:** (if needed) dscsa_regulations → final_response (synthesize answer)
 
 ### 3.5 Fallback (LLM tool choice)
 **Condition:** Has ToolMessage but no special case.
@@ -358,14 +361,14 @@ If a query requires capabilities beyond these skills, you MUST use the "none" sk
    - These are treated as tool steps in the chain and should appear as separate steps before the action they confirm
 
 5. Special Cases:
-   - Spatial visualization requests (grid, permeability, porosity, pressure, saturation, etc.) → final_response only (no tools in catalog; GUI suggestion)
+   - Network map/geographic visualization requests → final_response only (no tools in catalog; GUI suggestion)
    - Direct run with no modification → run_and_heal (no confirm; confirm_before_run applies only to scenario test)
-   - Scenario test → parse_simulation_input_file → simulator_manual → simulator_examples → (hitl_confirm_modify if confirm_before_modify=true) → modify_simulation_input_file → (hitl_confirm_run if confirm_before_run=true) → run_and_heal → final_response
+   - Scenario test → parse_simulation_input_file → tracelink_docs → dscsa_regulations → (hitl_confirm_modify if confirm_before_modify=true) → modify_simulation_input_file → (hitl_confirm_run if confirm_before_run=true) → run_and_heal → final_response
    - Plot/compare results → plot_summary_metric or plot_compare_summary_metric → final_response (no confirmation before plot)
-   - Keyword questions → simulator_manual → (simulator_examples) → final_response
-   - "Why" questions (breakthrough, connectivity, flow paths) with case path → run_flow_diagnostics → final_response. Do NOT refuse with "no simulation run" — use the tool; it validates files.
-   - When flow diagnostics fails due to missing results (flux, RPTRST, re-run), ask user if they want to run the simulation first. If user confirms (yes/run) in next turn → run_and_heal (Section 3.3b).
-   - Section 2.1 applies ONLY when user responds yes/no to a pending run confirm. If user asks a new question (e.g. flow diagnostics with case path), use 2.5b, not 2.1.
+   - Documentation questions → tracelink_docs → (dscsa_regulations) → final_response
+   - "Why" questions (stockouts, delays, compliance gaps, bottlenecks) with case path → run_flow_diagnostics → final_response. Do NOT refuse with "no simulation run" — use the tool; it validates files.
+   - When diagnostics fails due to missing results, ask user if they want to run the scenario first. If user confirms → run_and_heal (Section 3.3b).
+   - Section 2.1 applies ONLY when user responds yes/no to a pending run confirm. If user asks a new question, use the matching section, not 2.1.
 
 </Instructions>
 
@@ -390,7 +393,7 @@ You MUST respond with ONLY valid JSON as a LIST containing ONE object in the fol
 
 CRITICAL: For each step, you MUST include:
 1. "skill_name": The name of the skill that contains this tool. Must be one of:
-   - "rag_skill" (for simulator_manual, simulator_examples)
+   - "rag_skill" (for tracelink_docs, dscsa_regulations)
    - "input_file_skill" (for parse_simulation_input_file, modify_simulation_input_file, patch_simulation_input_keyword)
    - "simulation_skill" (for run_and_heal, monitor_simulation, stop_simulation)
    - "plot_skill" (for plot_summary_metric, plot_compare_summary_metric)
@@ -401,22 +404,22 @@ CRITICAL: For each step, you MUST include:
    - All necessary file paths (extracted from user query or conversation history)
    - All necessary arguments/parameters needed to activate the skill
    - Context about what needs to be done in this step
-   
+
    Examples of good sub_queries:
-   - For parse_simulation_input_file: "Parse the DATA file at data/knowledge_base/examples/spe1/SPE1CASE1.DATA and list all sections"
-   - For simulator_manual: "Retrieve documentation for the WCONINJE keyword format and syntax"
-   - For modify_simulation_input_file: "Modify data/knowledge_base/examples/spe1/SPE1CASE1.DATA: increase water injection rate for well I1 in WCONINJE to 55, output to data/knowledge_base/examples/spe1/SPE1CASE1_AGENT_GENERATED.DATA"
-   - For run_and_heal: "Run simulation on the modified file (output from modify step) with background=False"
-   - For plot_summary_metric: "Plot FOPT metric from output directory /path/to/output"
-   - For read_simulation_summary: "Read FOPR and FOPT variables from case data/knowledge_base/examples/spe1/SPE1CASE1.DATA"
-   - For run_flow_diagnostics: "Run flow diagnostics on data/knowledge_base/examples/spe1/SPE1CASE1.DATA for time steps 1 and 2"
+   - For parse_simulation_input_file: "Parse the scenario config at data/example_cases/supply_chain/drugY_NE.yaml and list all sections and node types"
+   - For tracelink_docs: "Retrieve documentation for the reorder_point parameter in OPUS scenario configs"
+   - For modify_simulation_input_file: "Modify data/example_cases/supply_chain/drugY_NE.yaml: increase demand_mean for PHARM_NE from 500 to 700, output to drugY_NE_AGENT_GENERATED.yaml"
+   - For run_and_heal: "Run scenario on the modified file (output from modify step) with background=False"
+   - For plot_summary_metric: "Plot order_fulfillment_rate KPI from output directory /path/to/output"
+   - For read_simulation_summary: "Read order_fulfillment_rate and inventory_doh_mean KPIs from scenario data/example_cases/supply_chain/drugY_NE.yaml"
+   - For run_flow_diagnostics: "Run network diagnostics on data/example_cases/supply_chain/drugY_NE.yaml to identify bottleneck nodes"
 
 </Output Format>
 
 <Examples>
 
-Example 1 - Section 2.0: Spatial visualization request
-User: "What is the grid structure?"
+Example 1 - Section 2.0: Network map visualization request
+User: "Show me the distribution network map"
 Conversation: [] (no tool output)
 Response:
 [
@@ -427,8 +430,8 @@ Response:
         "step_nr": 1,
         "tool_name": "final_response",
         "skill_name": null,
-        "sub_query": "Respond to user that spatial visualization (grid, permeability, porosity, pore volume, pressure, saturation, etc.) requires GUI tools like ResInsight, as this capability is not available in the current toolset",
-        "rationale": "User asks for spatial visualization. Section 2.0: no spatial visualization tools in catalog; return final_response with GUI suggestion."
+        "sub_query": "Respond to user that geographic network map visualization requires a GUI tool (e.g. TraceLink OPUS dashboard). Use read_grid_properties to get a text summary of network topology instead.",
+        "rationale": "User asks for geographic visualization. Section 2.0: no map rendering tools in catalog; return final_response with suggestion."
       }}
     ]
   }}
@@ -436,7 +439,7 @@ Response:
 
 Example 2 - Section 2.1: HITL confirm run (user confirms)
 User: "yes"
-Conversation: [{"role": "assistant", "content": "Run the simulation? Reply yes or run to start.", "pending_confirm_run": true, "pending_data_file": "data/knowledge_base/examples/spe1/SPE1CASE1.DATA"}]
+Conversation: [{"role": "assistant", "content": "Run the simulation? Reply yes or run to start.", "pending_confirm_run": true, "pending_data_file": "data/example_cases/supply_chain/drugY_NE_disruption.yaml"}]
 Response:
 [
   {{
@@ -446,7 +449,7 @@ Response:
         "step_nr": 1,
         "tool_name": "run_and_heal",
         "skill_name": "simulation_skill",
-        "sub_query": "Run simulation on data/knowledge_base/examples/spe1/SPE1CASE1.DATA with background=False (foreground mode to wait for completion)",
+        "sub_query": "Run simulation on data/example_cases/supply_chain/drugY_NE_disruption.yaml with background=False (foreground mode to wait for completion)",
         "rationale": "User confirmed run after pending_confirm_run prompt. According to Section 2.1, call run_and_heal with data_file from pending context."
       }}
     ]
@@ -455,7 +458,7 @@ Response:
 
 Example 2b - Section 2.1: HITL confirm run (user declines)
 User: "not yet"
-Conversation: [{"role": "assistant", "content": "Run the simulation? Reply yes or run to start.", "pending_confirm_run": true, "pending_data_file": "data/knowledge_base/examples/spe1/SPE1CASE1.DATA"}]
+Conversation: [{"role": "assistant", "content": "Run the simulation? Reply yes or run to start.", "pending_confirm_run": true, "pending_data_file": "data/example_cases/supply_chain/drugY_NE_disruption.yaml"}]
 Response:
 [
   {{
@@ -473,7 +476,7 @@ Response:
 ]
 
 Example 3 - Section 2.3: Direct run
-User: "Run the simulation: data/knowledge_base/examples/spe1/SPE1CASE1.DATA"
+User: "Run the simulation: data/example_cases/supply_chain/drugY_NE_disruption.yaml"
 Conversation: [] (no tool output)
 Response:
 [
@@ -484,7 +487,7 @@ Response:
         "step_nr": 1,
         "tool_name": "run_and_heal",
         "skill_name": "simulation_skill",
-        "sub_query": "Run simulation on data/knowledge_base/examples/spe1/SPE1CASE1.DATA with background=True (default background mode)",
+        "sub_query": "Run simulation on data/example_cases/supply_chain/drugY_NE_disruption.yaml with background=True (default background mode)",
         "rationale": "User message contains DATA file path and run intent with no modification intent. Section 2.3: direct run — call run_and_heal directly (no confirmation; confirm_before_run does not apply to direct run)."
       }}
     ]
@@ -492,7 +495,7 @@ Response:
 ]
 
 Example 4 - Section 2.4: Scenario test (no HITL)
-User: "Test a scenario with increased injection rate in data/knowledge_base/examples/spe1/SPE1CASE1.DATA"
+User: "Test a scenario with increased demand at PHARM_NE in data/example_cases/supply_chain/drugY_NE_disruption.yaml"
 Conversation: [] (no tool output)
 confirm_before_modify: false, confirm_before_run: false
 Response:
@@ -504,28 +507,28 @@ Response:
         "step_nr": 1,
         "tool_name": "parse_simulation_input_file",
         "skill_name": "input_file_skill",
-        "sub_query": "Parse data/knowledge_base/examples/spe1/SPE1CASE1.DATA to understand file structure and identify sections, especially WCONINJE keyword for injection rate modification",
+        "sub_query": "Parse data/example_cases/supply_chain/drugY_NE_disruption.yaml to understand file structure and identify sections, especially demand_mean parameter for demand increase modification",
         "rationale": "Scenario test requires file context first. According to Section 2.4, start with parse_simulation_input_file to understand file structure."
       }},
       {{
         "step_nr": 2,
-        "tool_name": "simulator_manual",
+        "tool_name": "tracelink_docs",
         "skill_name": "rag_skill",
-        "sub_query": "Retrieve documentation for WCONINJE keyword format, syntax, and parameters to understand how to modify injection rates",
+        "sub_query": "Retrieve documentation for demand_mean parameter format and allowed values for supply chain scenario configs",
         "rationale": "Need to look up keyword documentation (e.g., WCONINJE) for injection rate modification. According to Section 2.4, call simulator_manual with inferred keyword."
       }},
       {{
         "step_nr": 3,
-        "tool_name": "simulator_examples",
+        "tool_name": "dscsa_regulations",
         "skill_name": "rag_skill",
-        "sub_query": "Retrieve example DATA files showing WCONINJE keyword usage with injection rate specifications",
+        "sub_query": "Retrieve DSCSA regulations and compliance context related to the demand parameter modification",
         "rationale": "Need working examples of the keyword. According to Section 2.4, call simulator_examples with same keyword."
       }},
       {{
         "step_nr": 4,
         "tool_name": "modify_simulation_input_file",
         "skill_name": "input_file_skill",
-        "sub_query": "Modify data/knowledge_base/examples/spe1/SPE1CASE1.DATA: increase water injection rate in WCONINJE keyword, output to new scenario file in same directory",
+        "sub_query": "Modify data/example_cases/supply_chain/drugY_NE_disruption.yaml: increase demand_mean for PHARM_NE, output to new scenario file in same directory",
         "rationale": "Apply the modification with manual and example context. According to Section 2.4, call modify_simulation_input_file to create scenario file (_AGENT_GENERATED.DATA)."
       }},
       {{
@@ -547,7 +550,7 @@ Response:
 ]
 
 Example 4a - Section 2.4: Scenario test (with hitl_confirm_modify)
-User: "Test a scenario with increased injection rate in data/knowledge_base/examples/spe1/SPE1CASE1.DATA"
+User: "Test a scenario with increased demand at PHARM_NE in data/example_cases/supply_chain/drugY_NE_disruption.yaml"
 Conversation: [] (no tool output)
 confirm_before_modify: true, confirm_before_run: false
 Response:
@@ -559,35 +562,35 @@ Response:
         "step_nr": 1,
         "tool_name": "parse_simulation_input_file",
         "skill_name": "input_file_skill",
-        "sub_query": "Parse data/knowledge_base/examples/spe1/SPE1CASE1.DATA to understand file structure and identify sections, especially WCONINJE keyword for injection rate modification",
+        "sub_query": "Parse data/example_cases/supply_chain/drugY_NE_disruption.yaml to understand file structure and identify sections, especially demand_mean parameter for demand increase modification",
         "rationale": "Scenario test requires file context first. According to Section 2.4, start with parse_simulation_input_file."
       }},
       {{
         "step_nr": 2,
-        "tool_name": "simulator_manual",
+        "tool_name": "tracelink_docs",
         "skill_name": "rag_skill",
-        "sub_query": "Retrieve documentation for WCONINJE keyword format, syntax, and parameters to understand how to modify injection rates",
+        "sub_query": "Retrieve documentation for demand_mean parameter format and allowed values for supply chain scenario configs",
         "rationale": "Need to look up keyword documentation. According to Section 2.4, call simulator_manual with inferred keyword."
       }},
       {{
         "step_nr": 3,
-        "tool_name": "simulator_examples",
+        "tool_name": "dscsa_regulations",
         "skill_name": "rag_skill",
-        "sub_query": "Retrieve example DATA files showing WCONINJE keyword usage with injection rate specifications",
+        "sub_query": "Retrieve DSCSA regulations and compliance context related to the demand parameter modification",
         "rationale": "Need working examples. According to Section 2.4, call simulator_examples with same keyword."
       }},
       {{
         "step_nr": 4,
         "tool_name": "hitl_confirm_modify",
         "skill_name": null,
-        "sub_query": "Request user confirmation before modifying data/knowledge_base/examples/spe1/SPE1CASE1.DATA: increase water injection rate in WCONINJE keyword. Wait for user to reply 'yes' or 'apply'.",
+        "sub_query": "Request user confirmation before modifying data/example_cases/supply_chain/drugY_NE_disruption.yaml: increase demand_mean for PHARM_NE. Wait for user to reply 'yes' or 'apply'.",
         "rationale": "According to Section 2.4, since confirm_before_modify=true, call hitl_confirm_modify before modify_simulation_input_file to get user confirmation."
       }},
       {{
         "step_nr": 5,
         "tool_name": "modify_simulation_input_file",
         "skill_name": "input_file_skill",
-        "sub_query": "Modify data/knowledge_base/examples/spe1/SPE1CASE1.DATA: increase water injection rate in WCONINJE keyword, output to new scenario file (after user confirms)",
+        "sub_query": "Modify data/example_cases/supply_chain/drugY_NE_disruption.yaml: increase demand_mean for PHARM_NE, output to new scenario file (after user confirms)",
         "rationale": "After user confirms via hitl_confirm_modify, apply the modification. According to Section 2.4, call modify_simulation_input_file to create scenario file."
       }},
       {{
@@ -609,7 +612,7 @@ Response:
 ]
 
 Example 4b - Section 2.4: Scenario test (with both HITL confirms)
-User: "Test a scenario with increased gas injection rate in data/knowledge_base/examples/spe1/SPE1CASE1.DATA"
+User: "Test a scenario with increased gas injection rate in data/example_cases/supply_chain/drugY_NE_disruption.yaml"
 Conversation: [] (no tool output)
 confirm_before_modify: true, confirm_before_run: true
 Response:
@@ -621,35 +624,35 @@ Response:
         "step_nr": 1,
         "tool_name": "parse_simulation_input_file",
         "skill_name": "input_file_skill",
-        "sub_query": "Parse data/knowledge_base/examples/spe1/SPE1CASE1.DATA to understand file structure and identify sections, especially WCONINJE keyword for injection rate modification",
+        "sub_query": "Parse data/example_cases/supply_chain/drugY_NE_disruption.yaml to understand file structure and identify sections, especially demand_mean parameter for demand increase modification",
         "rationale": "Scenario test requires file context first. According to Section 2.4, start with parse_simulation_input_file."
       }},
       {{
         "step_nr": 2,
-        "tool_name": "simulator_manual",
+        "tool_name": "tracelink_docs",
         "skill_name": "rag_skill",
-        "sub_query": "Retrieve documentation for WCONINJE keyword format, syntax, and parameters to understand how to modify injection rates",
+        "sub_query": "Retrieve documentation for demand_mean parameter format and allowed values for supply chain scenario configs",
         "rationale": "Need to look up keyword documentation. According to Section 2.4, call simulator_manual with inferred keyword."
       }},
       {{
         "step_nr": 3,
-        "tool_name": "simulator_examples",
+        "tool_name": "dscsa_regulations",
         "skill_name": "rag_skill",
-        "sub_query": "Retrieve example DATA files showing WCONINJE keyword usage with injection rate specifications",
+        "sub_query": "Retrieve DSCSA regulations and compliance context related to the demand parameter modification",
         "rationale": "Need working examples. According to Section 2.4, call simulator_examples with same keyword."
       }},
       {{
         "step_nr": 4,
         "tool_name": "hitl_confirm_modify",
         "skill_name": null,
-        "sub_query": "Request user confirmation before modifying data/knowledge_base/examples/spe1/SPE1CASE1.DATA: increase water injection rate in WCONINJE keyword. Wait for user to reply 'yes' or 'apply'.",
+        "sub_query": "Request user confirmation before modifying data/example_cases/supply_chain/drugY_NE_disruption.yaml: increase demand_mean for PHARM_NE. Wait for user to reply 'yes' or 'apply'.",
         "rationale": "According to Section 2.4, since confirm_before_modify=true, call hitl_confirm_modify before modify_simulation_input_file."
       }},
       {{
         "step_nr": 5,
         "tool_name": "modify_simulation_input_file",
         "skill_name": "input_file_skill",
-        "sub_query": "Modify data/knowledge_base/examples/spe1/SPE1CASE1.DATA: increase water injection rate in WCONINJE keyword, output to new scenario file (after user confirms)",
+        "sub_query": "Modify data/example_cases/supply_chain/drugY_NE_disruption.yaml: increase demand_mean for PHARM_NE, output to new scenario file (after user confirms)",
         "rationale": "After user confirms via hitl_confirm_modify, apply the modification. According to Section 2.4, call modify_simulation_input_file."
       }},
       {{
@@ -677,8 +680,8 @@ Response:
   }}
 ]
 
-Example 5 - Section 2.5: Keyword question
-User: "What is the COMPDAT keyword format?"
+Example 5 - Section 2.5: Documentation question
+User: "What is the reorder_point parameter?"
 Conversation: [] (no tool output)
 Response:
 [
@@ -687,24 +690,24 @@ Response:
     "output_steps": [
       {{
         "step_nr": 1,
-        "tool_name": "simulator_manual",
+        "tool_name": "tracelink_docs",
         "skill_name": "rag_skill",
-        "sub_query": "Retrieve documentation for COMPDAT keyword format, syntax, field definitions, and parameter tables from simulator manual",
-        "rationale": "User asks for keyword format. According to Section 2.5, start with simulator_manual for authoritative documentation."
+        "sub_query": "Retrieve documentation for the reorder_point parameter: definition, format, allowed values, and usage in OPUS scenario configs",
+        "rationale": "User asks for parameter documentation. According to Section 2.5, start with tracelink_docs for authoritative documentation."
       }},
       {{
         "step_nr": 2,
-        "tool_name": "simulator_examples",
+        "tool_name": "dscsa_regulations",
         "skill_name": "rag_skill",
-        "sub_query": "Retrieve example DATA files showing COMPDAT keyword usage with concrete syntax examples",
-        "rationale": "May need examples to illustrate format. According to Section 2.5, optionally call simulator_examples if manual lacks format details."
+        "sub_query": "Retrieve any DSCSA or compliance context related to reorder_point and inventory policy",
+        "rationale": "Check for compliance context. According to Section 2.5, optionally call dscsa_regulations if compliance-related."
       }},
       {{
         "step_nr": 3,
         "tool_name": "final_response",
         "skill_name": null,
-        "sub_query": "Synthesize COMPDAT keyword format from manual and examples: provide title, purpose, general format with code block, field-by-field list, and source citation",
-        "rationale": "Synthesize format, fields, and examples into final answer. According to Section 2.5, end with final_response."
+        "sub_query": "Synthesize reorder_point documentation: provide purpose, format, allowed values, example config snippet, and source citation",
+        "rationale": "Synthesize documentation into final answer. According to Section 2.5, end with final_response."
       }}
     ]
   }}
@@ -730,7 +733,7 @@ Response:
 ]
 
 Example 7 - Section 2.6: Fallback (parse file)
-User: "Parse data/knowledge_base/examples/spe1/SPE1CASE1.DATA and list sections"
+User: "Parse data/example_cases/supply_chain/drugY_NE_disruption.yaml and list sections"
 Conversation: [] (no tool output)
 Response:
 [
@@ -741,14 +744,14 @@ Response:
         "step_nr": 1,
         "tool_name": "parse_simulation_input_file",
         "skill_name": "input_file_skill",
-        "sub_query": "Parse data/knowledge_base/examples/spe1/SPE1CASE1.DATA file and extract all sections (RUNSPEC, GRID, PROPS, SOLUTION, SUMMARY, SCHEDULE, etc.)",
+        "sub_query": "Parse data/example_cases/supply_chain/drugY_NE_disruption.yaml file and extract all sections (RUNSPEC, GRID, PROPS, SOLUTION, SUMMARY, SCHEDULE, etc.)",
         "rationale": "User explicitly asks to parse file. According to Section 2.6 fallback, use appropriate tool from catalog."
       }},
       {{
         "step_nr": 2,
         "tool_name": "final_response",
         "skill_name": null,
-        "sub_query": "Present the list of sections found in data/knowledge_base/examples/spe1/SPE1CASE1.DATA to the user",
+        "sub_query": "Present the list of sections found in data/example_cases/supply_chain/drugY_NE_disruption.yaml to the user",
         "rationale": "Present parsed file structure to user. According to Section 2.6, end with final_response."
       }}
     ]
@@ -1038,11 +1041,11 @@ def _fallback_routing(
     """
     user_lower = user_input.lower()
     
-    # Spatial visualization: no tools in catalog; respond with GUI suggestion only (Section 2.0)
+    # Network map visualization: no tools in catalog; respond with GUI suggestion only (Section 2.0)
     spatial_viz_keywords = [
-        "grid", "egrid", "pressure map", "saturation map", "permeability map", "porosity map", "pore volume",
-        "cell count", "dimensions", "grid structure",
-        "spatial visualization", "grid visualization"
+        "network map", "distribution map", "route map", "warehouse map",
+        "geographic map", "demand heat map", "map visualization",
+        "show map", "visualize network", "plot network map"
     ]
     if any(kw in user_lower for kw in spatial_viz_keywords):
         return [{
@@ -1051,36 +1054,37 @@ def _fallback_routing(
                 "step_nr": 1,
                 "tool_name": "final_response",
                 "skill_name": None,
-                "sub_query": "Respond to user that spatial visualization (grid, permeability, porosity, pore volume, pressure, saturation, etc.) requires GUI tools like ResInsight, as this capability is not available in the current toolset",
-                "rationale": "Fallback: Detected spatial visualization request; no tools in catalog, suggest GUI (Section 2.0)"
+                "sub_query": "Respond to user that geographic network map visualization requires a GUI tool (e.g. TraceLink OPUS dashboard). Offer to use read_grid_properties to return a text summary of network topology instead.",
+                "rationale": "Fallback: Detected network map visualization request; no tools in catalog, suggest GUI or read_grid_properties (Section 2.0)"
             }]
         }]
     
     # Check for run/modification intent
-    run_keywords = ["run", "execute", "simulate", "start"]
-    data_file_pattern = r'\.data\b|\.DATA\b'
+    run_keywords = ["run", "execute", "simulate", "start", "forecast"]
+    data_file_pattern = r'\.data\b|\.DATA\b|\.yaml\b|\.yml\b'
     has_data_file = bool(re.search(data_file_pattern, user_input, re.IGNORECASE))
-    
+
     # Check for modification intent (scenario test)
-    mod_keywords = ["modify", "change", "increase", "decrease", "test scenario", "scenario with"]
+    mod_keywords = ["modify", "change", "increase", "decrease", "test scenario", "scenario with",
+                    "add disruption", "adjust", "update demand", "change lead time"]
     has_modification = any(kw in user_lower for kw in mod_keywords)
     
     if has_data_file:
-        # Extract data file path
-        data_file_match = re.search(r'[\w/\.-]+\.DATA', user_input, re.IGNORECASE)
-        data_file_path = data_file_match.group(0) if data_file_match else "DATA_FILE_PATH"
-        
+        # Extract data file path (.yaml or .DATA)
+        data_file_match = re.search(r'[\w/\.-]+\.(yaml|yml|DATA)', user_input, re.IGNORECASE)
+        data_file_path = data_file_match.group(0) if data_file_match else "SCENARIO_CONFIG_PATH"
+
         if has_modification:
             # Section 2.4: Scenario test
             return [{
                 "multi_steps": True,
                 "output_steps": [
-                    {"step_nr": 1, "tool_name": "parse_simulation_input_file", "skill_name": "input_file_skill", "sub_query": f"Parse {data_file_path} to understand file structure", "rationale": "Fallback: Scenario test - parse file first"},
-                    {"step_nr": 2, "tool_name": "simulator_manual", "skill_name": "rag_skill", "sub_query": "Retrieve keyword documentation for the modification requested", "rationale": "Fallback: Look up keyword documentation"},
-                    {"step_nr": 3, "tool_name": "simulator_examples", "skill_name": "rag_skill", "sub_query": "Retrieve example DATA files showing the keyword usage", "rationale": "Fallback: Get examples"},
-                    {"step_nr": 4, "tool_name": "modify_simulation_input_file", "skill_name": "input_file_skill", "sub_query": f"Modify {data_file_path} according to user request, output to new scenario file", "rationale": "Fallback: Apply modification"},
-                    {"step_nr": 5, "tool_name": "run_and_heal", "skill_name": "simulation_skill", "sub_query": f"Run simulation on modified file with background=False", "rationale": "Fallback: Run modified file"},
-                    {"step_nr": 6, "tool_name": "final_response", "skill_name": None, "sub_query": "Summarize scenario test results", "rationale": "Fallback: Summarize results"}
+                    {"step_nr": 1, "tool_name": "parse_simulation_input_file", "skill_name": "input_file_skill", "sub_query": f"Parse {data_file_path} to understand scenario structure and node/lane parameters", "rationale": "Fallback: Scenario test - parse config first"},
+                    {"step_nr": 2, "tool_name": "tracelink_docs", "skill_name": "rag_skill", "sub_query": "Retrieve TraceLink documentation for the parameter being modified", "rationale": "Fallback: Look up parameter documentation"},
+                    {"step_nr": 3, "tool_name": "dscsa_regulations", "skill_name": "rag_skill", "sub_query": "Retrieve DSCSA compliance context for the modification if relevant", "rationale": "Fallback: Check compliance implications"},
+                    {"step_nr": 4, "tool_name": "modify_simulation_input_file", "skill_name": "input_file_skill", "sub_query": f"Modify {data_file_path} according to user request, output to new _AGENT_GENERATED.yaml file", "rationale": "Fallback: Apply modification"},
+                    {"step_nr": 5, "tool_name": "run_and_heal", "skill_name": "simulation_skill", "sub_query": f"Run scenario on modified file with background=False", "rationale": "Fallback: Run modified file"},
+                    {"step_nr": 6, "tool_name": "final_response", "skill_name": None, "sub_query": "Summarize scenario test results including key KPIs", "rationale": "Fallback: Summarize results"}
                 ]
             }]
         elif any(kw in user_lower for kw in run_keywords):
@@ -1091,33 +1095,33 @@ def _fallback_routing(
                     "step_nr": 1,
                     "tool_name": "run_and_heal",
                     "skill_name": "simulation_skill",
-                    "sub_query": f"Run simulation on {data_file_path} with background=True",
+                    "sub_query": f"Run supply chain scenario on {data_file_path} with background=False",
                     "rationale": "Fallback: Direct run request (Section 2.3)"
                 }]
             }]
-    
+
     # Check for parse file intent (Section 2.6)
-    parse_keywords = ["parse", "list sections", "extract sections"]
+    parse_keywords = ["parse", "list sections", "extract sections", "validate"]
     if any(kw in user_lower for kw in parse_keywords) and has_data_file:
-        data_file_match = re.search(r'[\w/\.-]+\.DATA', user_input, re.IGNORECASE)
-        data_file_path = data_file_match.group(0) if data_file_match else "DATA_FILE_PATH"
+        data_file_match = re.search(r'[\w/\.-]+\.(yaml|yml|DATA)', user_input, re.IGNORECASE)
+        data_file_path = data_file_match.group(0) if data_file_match else "SCENARIO_CONFIG_PATH"
         return [{
             "multi_steps": True,
             "output_steps": [
-                {"step_nr": 1, "tool_name": "parse_simulation_input_file", "skill_name": "input_file_skill", "sub_query": f"Parse {data_file_path} file and extract all sections (RUNSPEC, GRID, PROPS, etc.)", "rationale": "Fallback: Parse file request (Section 2.6)"},
-                {"step_nr": 2, "tool_name": "final_response", "skill_name": None, "sub_query": "Present the list of sections found to the user", "rationale": "Fallback: Present parsed file structure"}
+                {"step_nr": 1, "tool_name": "parse_simulation_input_file", "skill_name": "input_file_skill", "sub_query": f"Parse {data_file_path} and list all sections, nodes, lanes, products", "rationale": "Fallback: Parse config request (Section 2.6)"},
+                {"step_nr": 2, "tool_name": "final_response", "skill_name": None, "sub_query": "Present the scenario structure and validation results to the user", "rationale": "Fallback: Present parsed config structure"}
             ]
         }]
-    
-    # Check for keyword questions
-    keyword_patterns = ["format", "syntax", "what is", "how do", "explain", "keyword"]
-    if any(kw in user_lower for kw in keyword_patterns):
+
+    # Check for documentation questions
+    doc_patterns = ["format", "syntax", "what is", "how do", "explain", "parameter", "config"]
+    if any(kw in user_lower for kw in doc_patterns):
         return [{
             "multi_steps": True,
             "output_steps": [
-                {"step_nr": 1, "tool_name": "simulator_manual", "skill_name": "rag_skill", "sub_query": f"Retrieve documentation for keyword from user query: {user_input}", "rationale": "Fallback: Keyword question - look up manual"},
-                {"step_nr": 2, "tool_name": "simulator_examples", "skill_name": "rag_skill", "sub_query": f"Retrieve example DATA files showing keyword usage from user query", "rationale": "Fallback: Get examples"},
-                {"step_nr": 3, "tool_name": "final_response", "skill_name": None, "sub_query": "Synthesize keyword format, fields, and examples into final answer with source citations", "rationale": "Fallback: Synthesize answer"}
+                {"step_nr": 1, "tool_name": "tracelink_docs", "skill_name": "rag_skill", "sub_query": f"Retrieve TraceLink/OPUS documentation for: {user_input}", "rationale": "Fallback: Documentation question - look up tracelink_docs"},
+                {"step_nr": 2, "tool_name": "dscsa_regulations", "skill_name": "rag_skill", "sub_query": f"Retrieve DSCSA compliance context related to: {user_input}", "rationale": "Fallback: Get compliance context"},
+                {"step_nr": 3, "tool_name": "final_response", "skill_name": None, "sub_query": "Synthesize documentation and compliance context into final answer with source citations", "rationale": "Fallback: Synthesize answer"}
             ]
         }]
     

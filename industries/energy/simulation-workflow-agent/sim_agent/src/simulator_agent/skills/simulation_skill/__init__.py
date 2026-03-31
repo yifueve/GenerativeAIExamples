@@ -14,25 +14,16 @@
 # limitations under the License.
 
 """
-OPM Simulation Skill for OPM Flow
+Supply Chain Simulation Skill — TraceLink
 
-This skill provides tools for running, monitoring, and controlling OPM Flow simulations.
-Follows the Agent Skills specification: https://agentskills.io/specification
-
-Structure:
-- SKILL.md: Skill metadata and instructions
-- test.py: Test suite
-- scripts/: Tool implementations (simulation_tools.py, self_heal_chain.py)
-- references/: Additional documentation
-- assets/: Static resources
-
-Based on TOOL_DECISION_TREE.md Sections 2.1, 2.3, 2.4, 3.3, and 3.5.
+Provides tools for running, monitoring, and controlling pharma supply chain
+inventory simulations using the discrete-time inventory_sim engine.
 
 Tools:
-- run_and_heal: Run OPM Flow + auto-fix on failure (primary run tool)
-- run_simulation: Low-level run tool (used internally by run_and_heal)
-- monitor_simulation: Monitor simulation progress and status
-- stop_simulation: Stop running simulations by PID
+- run_and_heal: Run scenario + auto-fix config errors on failure (primary run tool)
+- run_simulation: Low-level runner (used internally by run_and_heal)
+- monitor_simulation: Check simulation progress and read results
+- stop_simulation: Stop a background simulation job by job ID
 """
 
 from .scripts.simulation_tools import (

@@ -24,7 +24,7 @@ from typing import Any
 
 def classify_query_rule_based(query: str) -> dict[str, Any]:
     q = (query or "").strip().lower()
-    if "run" in q and ("simulation" in q or "flow" in q or "opm" in q):
+    if "run" in q and ("scenario" in q or "simulation" in q or "yaml" in q or "supply chain" in q):
         return {"skill": "simulation_skill", "tool": "run_and_heal", "tool_input": {}}
     if "plot" in q and "compare" in q:
         return {"skill": "plot_skill", "tool": "plot_compare_summary_metric", "tool_input": {}}
@@ -32,8 +32,8 @@ def classify_query_rule_based(query: str) -> dict[str, Any]:
         return {"skill": "plot_skill", "tool": "plot_summary_metric", "tool_input": {}}
     if "parse" in q or "modify" in q or "validate" in q or "patch" in q:
         return {"skill": "input_file_skill", "tool": "parse_simulation_input_file", "tool_input": {}}
-    if "manual" in q or "example" in q or "search" in q:
-        return {"skill": "rag_skill", "tool": "simulator_manual", "tool_input": {}}
-    if "result" in q or "summary" in q or "read_simulation" in q:
+    if "docs" in q or "documentation" in q or "dscsa" in q or "compliance" in q or "regulation" in q or "search" in q:
+        return {"skill": "rag_skill", "tool": "tracelink_docs", "tool_input": {}}
+    if "result" in q or "summary" in q or "kpi" in q or "fulfillment" in q or "inventory" in q:
         return {"skill": "results_skill", "tool": "read_simulation_summary", "tool_input": {}}
     return {"skill": "final_response", "tool": None, "tool_input": {}}

@@ -1,0 +1,105 @@
+# TraceLink Supply Chain Scenario
+# Drug Y distribution — Northeast region with port congestion disruption
+# Tests order fulfillment, inventory resilience, and DSCSA compliance under stress
+
+scenario:
+  name: "DrugY_NE_PortCongestion"
+  horizon_days: 91       # 13 weeks
+  time_step_days: 7      # weekly review cycle
+
+products:
+  - id: DRUG_Y
+    unit_cost: 45.00
+    holding_cost_per_unit_day: 0.50
+    shortage_cost_per_unit: 200.00   # high penalty — critical medication
+
+nodes:
+  - id: MFG_BOSTON
+    type: manufacturer
+    production_capacity: 2000        # units per week
+    storage_capacity: 20000
+    initial_inventory: 8000
+
+  - id: DC_CHICAGO
+    type: distribution_center
+    storage_capacity: 10000
+    initial_inventory: 1500
+    reorder_point: 800
+    order_quantity: 1200
+
+  - id: DC_ATLANTA
+    type: distribution_center
+    storage_capacity: 8000
+    initial_inventory: 1200
+    reorder_point: 600
+    order_quantity: 1000
+
+  - id: PHARM_NE
+    type: pharmacy
+    demand_mean: 150.0               # units per week
+    demand_std: 20.0
+    initial_inventory: 300
+    reorder_point: 200
+    order_quantity: 300
+    dscsa_compliance_rate: 0.98
+
+  - id: PHARM_MIDWEST
+    type: pharmacy
+    demand_mean: 120.0
+    demand_std: 15.0
+    initial_inventory: 250
+    reorder_point: 150
+    order_quantity: 250
+    dscsa_compliance_rate: 0.97
+
+  - id: PHARM_SOUTH
+    type: pharmacy
+    demand_mean: 100.0
+    demand_std: 12.0
+    initial_inventory: 200
+    reorder_point: 120
+    order_quantity: 200
+    dscsa_compliance_rate: 0.99
+
+lanes:
+  - id: MFG_BOSTON_to_DC_CHICAGO
+    from: MFG_BOSTON
+    to: DC_CHICAGO
+    lead_time_steps: 1               # 1 week
+    transport_cost_per_unit: 2.50
+
+  - id: MFG_BOSTON_to_DC_ATLANTA
+    from: MFG_BOSTON
+    to: DC_ATLANTA
+    lead_time_steps: 1
+    transport_cost_per_unit: 3.00
+
+  - id: DC_CHICAGO_to_PHARM_NE
+    from: DC_CHICAGO
+    to: PHARM_NE
+    lead_time_steps: 1
+    transport_cost_per_unit: 1.20
+
+  - id: DC_CHICAGO_to_PHARM_MIDWEST
+    from: DC_CHICAGO
+    to: PHARM_MIDWEST
+    lead_time_steps: 1
+    transport_cost_per_unit: 0.80
+
+  - id: DC_ATLANTA_to_PHARM_SOUTH
+    from: DC_ATLANTA
+    to: PHARM_SOUTH
+    lead_time_steps: 1
+    transport_cost_per_unit: 0.90
+
+disruptions:
+  - type: port_congestion
+    start_step: 2                    # starts week 2
+    end_step: 5                      # lasts 4 weeks
+    affected_lane: MFG_BOSTON_to_DC_CHICAGO
+    lead_time_delay_steps: 2         # adds 2 weeks delay
+
+output:
+  save_results: true
+  results_dir: "results"
+  random_seed: 42

@@ -70,24 +70,24 @@ def _apply_llm_modifications(
     model = model_name or get_config().get_llm_model(use_for="tool")
     llm = ChatOpenAI(model=model, max_tokens=4096)
     prompt_parts = [
-        "You are editing an OPM Flow DATA file.\n"
+        "You are editing a TraceLink supply chain scenario YAML config file.\n"
         "CRITICAL: Make ONLY the minimal change requested. Do NOT reformat, reflow, or alter any other part of the file.\n"
-        "Copy every other line exactly as it appears (same spacing, comments, line breaks). Only edit the specific keyword or record that the request refers to.\n"
+        "Copy every other line exactly as it appears (same spacing, comments, line breaks). Only edit the specific parameter or section that the request refers to.\n"
         "Return the FULL file content with just that one change. Do not add markdown or code fences.\n\n",
         "Modification request:\n",
         f"{modifications}\n\n",
     ]
     if manual_context and manual_context.strip():
         prompt_parts.append(
-            "Reference (OPM manual excerpt for this keyword; use for correct field order and meaning):\n"
+            "Reference (TraceLink/OPUS documentation excerpt for this parameter; use for correct field names and meaning):\n"
             f"{manual_context.strip()}\n\n"
         )
     if example_context and example_context.strip():
         prompt_parts.append(
-            "Example snippets (OPM DATA examples for this keyword):\n"
+            "Example snippets (TraceLink scenario config examples for this parameter):\n"
             f"{example_context.strip()}\n\n"
         )
-    prompt_parts.append("Current DATA file content:\n")
+    prompt_parts.append("Current scenario YAML file content:\n")
     prompt_parts.append(f"{content}\n")
     prompt = "".join(prompt_parts)
     response = llm.invoke(prompt)
@@ -124,9 +124,9 @@ def _apply_llm_modifications_to_block(
     model = model_name or get_config().get_llm_model(use_for="tool")
     llm = ChatOpenAI(model=model, max_tokens=128)
     prompt_parts = [
-        "You are editing ONE keyword block of an OPM Flow DATA file. "
+        "You are editing ONE parameter block of a TraceLink supply chain scenario YAML config. "
         "Return ONLY two values: the OLD value to replace and the NEW value, separated by a single space. "
-        "Do not change anything else (no slashes, no formatting). Example: 50 55\n\n",
+        "Do not change anything else (no indentation, no comments, no formatting). Example: 500 600\n\n",
         "Modification request:\n",
         f"{modifications}\n\n",
         "Current block:\n",

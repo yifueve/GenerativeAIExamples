@@ -14,50 +14,99 @@
 # limitations under the License.
 
 """
-Parse DATA File Tool
+Parse Supply Chain Scenario Config Tool — TraceLink
 
-Tool for parsing and analyzing OPM DATA file structure.
-Used in TOOL_DECISION_TREE.md Section 2.4 (Scenario test chain) as the first step.
+Parses and validates a YAML supply chain scenario config file.
+First step in the scenario test chain:
+  parse_scenario_config → tracelink_docs → modify_scenario_config → run_and_heal
 """
 
 from pathlib import Path
 
+import yaml
 from langchain_core.tools import tool
 from pydantic.v1 import BaseModel, Field
 
-from ..utils import parse_data_sections
+from simulator_agent.skills.simulation_skill.scripts.inventory_sim import validate_config
 
 
 class ParseDataFileInput(BaseModel):
-    file_path: str = Field(..., description="Path to the OPM DATA file")
+    file_path: str = Field(
+        ..., description="Path to the supply chain scenario YAML config file"
+    )
 
 
 @tool("parse_simulation_input_file", args_schema=ParseDataFileInput)
 def parse_simulation_input_file(file_path: str) -> str:
     """
-    Parse an OPM DATA file and return its structure.
-    
-    This tool is the first step in the scenario test chain (Section 2.4):
-    parse_simulation_input_file → simulator_manual → simulator_examples → modify_simulation_input_file → run_and_heal
-    
-    Returns a string listing all sections found in the DATA file.
+    Parse a supply chain scenario YAML config file and return its structure.
+
+    Validates required sections (scenario, products, nodes, lanes) and reports
+    node types, lane connections, products, and any configuration errors.
+
+    First step in the scenario test chain:
+    parse_simulation_input_file → tracelink_docs → modify_scenario_config → run_and_heal
     """
     try:
-        file_path_obj = Path(file_path)
-
-        if not file_path_obj.exists():
+        path = Path(file_path)
+        if not path.exists():
             return f"Error: File not found: {file_path}"
+        if path.suffix not in (".yaml", ".yml"):
+            return f"Error: Expected a .yaml scenario config. Got: {file_path}"
 
-        # Read file content
-        with open(file_path_obj, 'r') as f:
-            content = f.read()
+        with open(path) as f:
+            cfg = yaml.safe_load(f)
 
-        # Parse into sections
-        sections = parse_data_sections(content)
+        if not isinstance(cfg, dict):
+            return "Error: File is not a valid YAML mapping."
 
-        section_list = ", ".join(sections.keys()) if sections else "None"
-        return f"Sections found: {section_list}"
+        # Validation
+        errors = validate_config(cfg)
 
+        sc = cfg.get("scenario", {})
+        nodes = cfg.get("nodes", [])
+        lanes = cfg.get("lanes", [])
+        products = cfg.get("products", [])
+        disruptions = cfg.get("disruptions", [])
+
+        node_types: dict[str, list[str]] = {}
+        for n in nodes:
+            t = n.get("type", "unknown")
+            node_types.setdefault(t, []).append(n.get("id", "?"))
+
+        output = (
+            f"Scenario config: {path.name}\n"
+            f"  Name: {sc.get('name', '?')}\n"
+            f"  Horizon: {sc.get('horizon_days', '?')} days, "
+            f"time step: {sc.get('time_step_days', '?')} days\n\n"
+            f"Sections found: scenario, products, nodes, lanes"
+        )
+        if disruptions:
+            output += ", disruptions"
+        output += "\n\n"
+
+        output += f"Products ({len(products)}): " + ", ".join(p.get("id", "?") for p in products) + "\n"
+        output += f"Nodes ({len(nodes)}):\n"
+        for ntype, ids in node_types.items():
+            output += f"  {ntype}: {', '.join(ids)}\n"
+        output += f"Lanes ({len(lanes)}): "
+        output += ", ".join(
+            f"{l.get('from', '?')}→{l.get('to', '?')}" for l in lanes
+        ) + "\n"
+
+        if disruptions:
+            output += f"Disruptions ({len(disruptions)}): " + ", ".join(
+                d.get("type", "?") for d in disruptions
+            ) + "\n"
+
+        if errors:
+            output += "\nValidation errors:\n" + "\n".join(f"  ✗ {e}" for e in errors)
+        else:
+            output += "\nValidation: ✓ No errors found"
+
+        return output
+
+    except yaml.YAMLError as e:
+        return f"Error: Invalid YAML syntax: {e}"
     except Exception as e:
-        return f"Error parsing DATA file: {str(e)}"
-
+        return f"Error parsing scenario config: {e}"

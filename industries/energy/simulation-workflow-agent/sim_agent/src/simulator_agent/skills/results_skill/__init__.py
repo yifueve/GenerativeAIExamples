@@ -14,24 +14,15 @@
 # limitations under the License.
 
 """
-OPM Results Skill for OPM Flow
+Supply Chain Results Skill — TraceLink
 
-This skill provides tools for reading and analyzing OPM Flow simulation binary output files.
-Follows the Agent Skills specification: https://agentskills.io/specification
-
-Structure:
-- SKILL.md: Skill metadata and instructions
-- test.py: Test suite
-- scripts/: Tool implementations (opm_results_tools.py, flow_diagnostics_tools.py)
-- references/: Additional documentation
-- assets/: Static resources
-
-Based on TOOL_DECISION_TREE.md Section 2.6 (LLM tool choice) and Section 3.3 (after run_and_heal).
+Provides tools for reading and analyzing supply chain simulation results.
+Reads JSON output from inventory_sim and YAML scenario configs.
 
 Tools:
-- read_simulation_summary: Read time-series data from simulation summary files
-- read_grid_properties: Read static grid properties from initialization files
-- run_flow_diagnostics: Run flow diagnostics (TOF, tracer, allocation, F-Phi, Lorenz)
+- read_simulation_summary: Read KPI time-series from simulation results JSON
+- read_grid_properties: Read network topology from scenario YAML config
+- run_flow_diagnostics: Run network diagnostics (bottlenecks, critical paths, partner analysis)
 """
 
 from .scripts.opm_results_tools import (

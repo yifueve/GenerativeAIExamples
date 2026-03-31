@@ -358,14 +358,14 @@ def execute_tools(state: GlobalState) -> GlobalState:
         state["internal_trajectory"] = trajectory_append
         return state
 
-    if tool_name in ("simulator_manual", "simulator_examples"):
+    if tool_name in ("simulator_manual", "simulator_examples", "tracelink_docs", "dscsa_regulations"):
         query = (tool_input.get("query") or "").strip()
         raw = (tool_input.get("collection_name") or tool_name).strip()
-        # Resolve simulator_manual -> config collection (docs)
-        if raw == "simulator_manual":
+        # Resolve RAG tool name -> Milvus collection name
+        if raw in ("simulator_manual", "tracelink_docs"):
             collection_name = get_config().get_manual_collection_name()
-        elif raw == "simulator_examples":
-            collection_name = "simulator_input_examples"
+        elif raw in ("simulator_examples", "dscsa_regulations"):
+            collection_name = get_config()._config.get("retrievers", {}).get("simulator_examples", {}).get("collection_name", "dscsa_regulations")
         else:
             collection_name = raw
         try:
@@ -387,7 +387,7 @@ def execute_tools(state: GlobalState) -> GlobalState:
         except ImportError as e:
             state["agent_final_output"] = (
                 f"**RAG lookup unavailable**\n\n"
-                f"The knowledge-base tools (simulator_manual / simulator_examples) could not be loaded: {e}. "
+                f"The knowledge-base tools (tracelink_docs / dscsa_regulations) could not be loaded: {e}. "
                 f"Ensure dependencies and Milvus are configured."
             )
             trajectory_append.append({"step": "execute_tools", "message": f"rag_chain import error: {e!r}", "data": {"tool_name": tool_name, "success": False, "error": str(e)}})

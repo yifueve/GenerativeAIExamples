@@ -14,24 +14,14 @@
 # limitations under the License.
 
 """
-DATA File Skill for OPM Flow
+Supply Chain Scenario Config Skill — TraceLink
 
-This skill provides tools for parsing, modifying, and patching simulator input files (OPM Flow uses .DATA format).
-Follows the Agent Skills specification: https://agentskills.io/specification
-
-Structure:
-- SKILL.md: Skill metadata and instructions
-- test.py: Test suite
-- scripts/: Tool implementations (parse_tool.py, modify_tool.py, patch_tool.py)
-- references/: Additional documentation
-- assets/: Static resources
-
-Based on TOOL_DECISION_TREE.md Section 2.4 (Scenario test chain) and related sections.
+Provides tools for parsing, modifying, and patching supply chain scenario YAML config files.
 
 Tools:
-- parse_simulation_input_file: Parse and analyze simulator input file structure
-- modify_simulation_input_file: Modify simulator input files with natural language instructions
-- patch_simulation_input_keyword: Patch specific keyword blocks in simulator input files
+- parse_simulation_input_file: Parse and validate a scenario YAML config structure
+- modify_simulation_input_file: Modify scenario config with natural language instructions
+- patch_simulation_input_keyword: Patch a specific parameter block in a scenario config
 """
 
 from .scripts.parse_tool import parse_simulation_input_file

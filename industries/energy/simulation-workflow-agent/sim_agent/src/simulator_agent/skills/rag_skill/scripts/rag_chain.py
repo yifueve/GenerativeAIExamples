@@ -68,14 +68,16 @@ FALLBACK_MODELS = [
 ]
 
 
-# Tool names (simulator-agnostic) -> Milvus collection names
-TOOL_NAMES = ("simulator_manual", "simulator_examples")
+# Tool names -> Milvus collection names
+TOOL_NAMES = ("simulator_manual", "simulator_examples", "tracelink_docs", "dscsa_regulations")
 TOOL_TO_COLLECTION = {
     "simulator_manual": "docs",
     "simulator_examples": "simulator_input_examples",
+    "tracelink_docs": "tracelink_docs",
+    "dscsa_regulations": "dscsa_regulations",
 }
-# Actual Milvus collection names (created by setup.sh --full / ingest_papers.sh)
-ALLOWED_COLLECTIONS = ("docs", "simulator_input_examples")
+# Actual Milvus collection names
+ALLOWED_COLLECTIONS = ("docs", "simulator_input_examples", "tracelink_docs", "dscsa_regulations")
 
 
 def run_milvus_query(
@@ -124,12 +126,12 @@ def retrieval_step(inputs: dict) -> dict:
     inputs may include "collection_name" (tool name or Milvus collection); default is "simulator_manual".
     """
     query = (inputs.get("query") or "").strip()
-    tool_or_collection = (inputs.get("collection_name") or "simulator_manual").strip()
+    tool_or_collection = (inputs.get("collection_name") or "tracelink_docs").strip()
     # Map tool name -> Milvus collection
     collection_name = TOOL_TO_COLLECTION.get(tool_or_collection, tool_or_collection)
     if collection_name not in ALLOWED_COLLECTIONS:
-        collection_name = "docs"  # fallback to the docs collection
-    if collection_name == "simulator_input_examples":
+        collection_name = "tracelink_docs"  # fallback to primary docs collection
+    if collection_name in ("simulator_input_examples", "dscsa_regulations"):
         metadata_contains = None
     else:
         keywords = extract_all_caps_keywords(query)
