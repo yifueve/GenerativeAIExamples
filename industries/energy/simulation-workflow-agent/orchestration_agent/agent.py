@@ -270,7 +270,9 @@ def _run_orchestrator_interactive(
     files: list[str],
 ) -> int:
     """Run orchestrator-level interactive loop: route each query via LLM."""
-    print("Simulation Workflow Assistant — Interactive mode", file=sys.stderr)
+    print("=" * 60, file=sys.stderr)
+    print("  Supply Chain Disruption Response Agent for TRACELINK", file=sys.stderr)
+    print("=" * 60, file=sys.stderr)
     print("Type your query and press Enter. Commands: 'quit' or 'exit' to stop.", file=sys.stderr)
     print("-" * 60, file=sys.stderr)
 

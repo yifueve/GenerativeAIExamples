@@ -202,30 +202,24 @@ class OptimizationConfig:
     def print_summary(self):
         """Print configuration summary"""
         print("="*60)
-        print(f"CONFIGURATION: {self.config_file.name}")
+        print(f"Supply Chain Configuration (Capacitated Facility Location / Warehouse Planning Problem)")
         print("="*60)
-        print("\nPaths:")
-        print(f"  Template: {self.template_path}")
-        if self.sim_dir:
-            print(f"  Simulation directory: {self.sim_dir}")
-        else:
-            print(f"  Simulation base: {self.sim_dir_base}")
-            print(f"  Case name: {self.case_name}")
-            print(f"  (Final sim_dir: {self.case_name}.sim)")
-        print(f"  Simulator command: {self.simulator_command}")
-        
-        print("\nOptimization Variables:")
+        print("\nScenario:")
+        print(f"  Config file: {self.config_file.name}")
+        print(f"  Run name: {self.run_name if self.run_name else 'auto-generated'}")
+
+        print("\nDecision Variables:")
         for var_name, var_spec in self.config['variables'].items():
             print(f"  {var_name}: [{var_spec['min']}, {var_spec['max']}]")
             if 'description' in var_spec:
                 print(f"    {var_spec['description']}")
-        
+
         print(f"\nOptimization Algorithm: {self.algorithm}")
         print(f"  Population size: {self.pop_size}")
-        print(f"  Generations/Iterations: {self.n_generations}")
-        print(f"  Parallel simulations: {self.n_parallel}")
+        print(f"  Iterations: {self.n_generations}")
+        print(f"  Parallel workers: {self.n_parallel}")
         print(f"  Total evaluations: {self.pop_size * self.n_generations}")
-        
+
         if self.algorithm == 'PSO':
             print(f"\nPSO Parameters:")
             print(f"  Inertia weight (w): {self.algorithm_params.get('w')}")
@@ -238,26 +232,13 @@ class OptimizationConfig:
             print(f"  Crossover eta: {self.algorithm_params.get('crossover_eta')}")
             print(f"  Mutation prob: {self.algorithm_params.get('mutation_prob')}")
             print(f"  Mutation eta: {self.algorithm_params.get('mutation_eta')}")
-        
+
         print("\nObjective:")
         print(f"  Mode: {self.objective_mode}")
-        
-        if self.objective_mode == "NPV":
-            print("\nEconomics:")
-            print(f"  Oil price: ${self.economics['oil_price']:.2f}/stb")
-            print(f"  Water injection cost: ${self.economics['water_injection_cost']:.2f}/stb")
-            print(f"  Water production cost: ${self.economics['water_production_cost']:.2f}/stb")
-            print(f"  Discount rate: {self.economics['discount_rate']*100:.1f}%")
-            print(f"  Number of wells: {self.economics['num_wells']}")
-            print(f"  Well length: {self.economics['well_length']:.1f} m")
-            print(f"  Drilling cost: ${self.economics['drilling_cost_per_meter']:.0f}/m")
-        
-        print("\nSimulation:")
+
+        print("\nExecution:")
         print(f"  Timeout: {self.timeout}s")
-        
-        print("\nOutput:")
-        print(f"  Run name: {self.run_name if self.run_name else 'auto-generated'}")
-        print(f"  Save comprehensive results: {self.save_comprehensive}")
+        print(f"  Save results: {self.save_comprehensive}")
         print(f"  Save log: {self.save_log}")
         if self.save_log:
             print(f"  Log file: {self.log_file}")

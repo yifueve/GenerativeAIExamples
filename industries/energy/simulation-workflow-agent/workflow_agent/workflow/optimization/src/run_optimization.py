@@ -43,6 +43,66 @@ from config_loader import load_config
 from orchestrator import run_optimization
 
 
+def _is_cflp(config_path: str) -> bool:
+    """Return True if the config specifies algorithm.type == CFLP."""
+    import yaml
+    with open(config_path, "r") as f:
+        cfg = yaml.safe_load(f) or {}
+    return (cfg.get("algorithm") or {}).get("type", "").upper() == "CFLP"
+
+
+def run_cflp(config_path: str) -> None:
+    """Load CFLP config, solve, and write results JSON for the workflow agent."""
+    import json
+    import yaml
+    from cflp_solver import solve_cflp, print_cflp_results
+
+    with open(config_path, "r") as f:
+        cfg = yaml.safe_load(f)
+
+    warehouses = cfg["warehouses"]
+    customers = cfg["customers"]
+
+    print(f"\n{'='*60}")
+    print("STARTING SUPPLY CHAIN OPTIMIZATION (CFLP)")
+    print(f"{'='*60}\n")
+    print(f"  Warehouses : {[w['id'] for w in warehouses]}")
+    print(f"  Customers  : {[c['id'] for c in customers]}")
+    print(f"  Drug       : Y  |  Region focus: NE\n")
+
+    result = solve_cflp(cfg)
+    print_cflp_results(result, warehouses, customers)
+
+    # Write results JSON so the workflow agent executor can parse it
+    # Subprocess runs with run_cwd=./workflow, so write relative to cwd
+    paths = cfg.get("paths", {})
+    sim_dir_base = paths.get("sim_dir_base", "dataset/CFLP")
+    case_name = paths.get("case_name", "CFLP_DrugY")
+    sim_dir = Path.cwd() / sim_dir_base / f"{case_name}.sim"
+    sim_dir.mkdir(parents=True, exist_ok=True)
+
+    results_file = sim_dir / f"{case_name}_results.json"
+    results_data = {
+        "best_solution": {
+            "objective": result.total_cost if result.success else None,
+            "open_warehouses": result.open_warehouses,
+            "flows": {f"{k[0]}->{k[1]}": v for k, v in result.flows.items()},
+        },
+        "best_objective": result.total_cost if result.success else None,
+        "optimization_summary": {
+            "total_evaluations": 1,
+            "status": result.message,
+            "fixed_cost": result.fixed_cost,
+            "transport_cost": result.transport_cost,
+            "total_cost": result.total_cost,
+        },
+        "success": result.success,
+    }
+    with open(results_file, "w") as f:
+        json.dump(results_data, f, indent=2)
+    print(f"Results saved to: {results_file}")
+
+
 def main():
     """Main entry point for configuration-based optimization"""
     
@@ -80,22 +140,27 @@ Available config files:
     
     # Load configuration
     print(f"\n{'='*60}")
-    print(f"LOADING CONFIGURATION")
+    print(f"LOADING CONFIGURATION (forecast + robust optimization)")
     print(f"{'='*60}\n")
-    
+
+    # Route to CFLP solver if configured
+    if _is_cflp(args.config):
+        run_cflp(args.config)
+        return
+
     try:
         config = load_config(args.config)
         config.print_summary()
     except Exception as e:
         print(f"Error loading configuration: {e}")
         sys.exit(1)
-    
+
     # Dry run - just print config and exit
     if args.dry_run:
         print("Dry run - configuration loaded successfully!")
         print("Remove --dry-run flag to start optimization.")
         sys.exit(0)
-    
+
     # Run optimization
     print(f"\n{'='*60}")
     print(f"STARTING OPTIMIZATION")

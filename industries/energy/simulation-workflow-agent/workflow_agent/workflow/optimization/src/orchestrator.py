@@ -359,10 +359,6 @@ class ReservoirOptimizationProblem(Problem):
             if result.returncode == 0:
                 return True
             else:
-                print(f"  Warning: Simulation {sim_filename} failed with code {result.returncode}")
-                if result.stderr:
-                    for line in result.stderr.strip().split("\n")[-10:]:  # last 10 lines
-                        print(f"    {line}")
                 return False
                 
         except subprocess.TimeoutExpired:
@@ -468,9 +464,7 @@ class ReservoirOptimizationProblem(Problem):
         n_individuals = X.shape[0]
         objectives = np.zeros(n_individuals)
         
-        print(f"\n{'='*60}")
-        print(f"Generation {self.generation}: Evaluating {n_individuals} individuals")
-        print(f"{'='*60}")
+        pass
         
         # Prepare tasks for parallel execution
         tasks = []
@@ -505,12 +499,7 @@ class ReservoirOptimizationProblem(Problem):
                             success=eval_dict['success']
                         )
                     
-                    # Simple output: individual number and objective value
-                    if self.objective_mode == "NPV":
-                        obj_display = f"${-obj_value/1e6:.2f} MM"
-                    else:
-                        obj_display = f"{-obj_value:.2f}"
-                    print(f"  Individual {ind_id}: {self.objective_mode} = {obj_display}")
+                    pass
                     
                 except Exception as e:
                     print(f"  Error evaluating individual {ind_id}: {e}")

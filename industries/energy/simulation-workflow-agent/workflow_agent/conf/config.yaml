@@ -70,7 +70,7 @@ output:
   experiments_dir: "./experiments"
 
 workflow:
-  base_config_path: "./workflow/optimization/conf/testcase_ga.yaml"
+  base_config_path: "./workflow/optimization/conf/testcase_cflp.yaml"
   run_command: "python ./optimization/src/run_optimization.py {config_path}"
   run_cwd: "./workflow"
 
