@@ -10,7 +10,7 @@ llm:
   model_name: nvidia/llama-3.3-nemotron-super-49b-v1.5
   temperature: 0.1
   top_p: 0.95
-  max_tokens: 64
+  max_tokens: 2048
   routing_system_prompt: |
     You are a router. Reply with exactly one word: simulator_agent or workflow_agent.
     ALL example questions in sim_agent/EXAMPLES.md route to simulator_agent.
