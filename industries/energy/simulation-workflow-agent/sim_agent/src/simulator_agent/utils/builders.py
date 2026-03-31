@@ -61,8 +61,9 @@ def _build_modify_input(sub_query: str, preferred: list[str]) -> dict[str, Any]:
         else:
             out["output_path"] = resolve_data_path(data_paths[1], preferred_paths=preferred)
     else:
-        # No output path in sub_query: use _AGENT_GENERATED suffix
-        out_name = f"{Path(file_path).stem}_AGENT_GENERATED.DATA"
+        # No output path in sub_query: use _AGENT_GENERATED suffix, preserving original extension
+        suffix = Path(file_path).suffix or ".DATA"
+        out_name = f"{Path(file_path).stem}_AGENT_GENERATED{suffix}"
         out["output_path"] = str(Path(file_path).parent / out_name)
     return out
 

@@ -46,14 +46,14 @@ def output_dir_from_context(state: GlobalState, tool_input: dict, data_file: str
 def extract_data_file_from_sub_query(sub_query: str) -> Optional[str]:
     if not (sub_query or "").strip():
         return None
-    match = re.search(r"[\w./\-\\]+\.DATA", sub_query, re.IGNORECASE)
+    match = re.search(r"[\w./\-\\]+\.(?:DATA|yaml|yml)", sub_query, re.IGNORECASE)
     return match.group(0).strip() if match else None
 
 
 def extract_data_files_from_sub_query(sub_query: str) -> list[str]:
     if not (sub_query or "").strip():
         return []
-    return re.findall(r"[\w./\-\\]+\.DATA", sub_query, re.IGNORECASE)
+    return re.findall(r"[\w./\-\\]+\.(?:DATA|yaml|yml)", sub_query, re.IGNORECASE)
 
 
 def resolve_data_path(path: str, preferred_paths: Optional[list[str]] = None) -> str:

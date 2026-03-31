@@ -19,6 +19,7 @@ Tool argument validators.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -26,6 +27,16 @@ from ..state import GlobalState, SkillUsed, PLOT_COMPARE_TOOL, PLOT_SUMMARY_TOOL
 from .paths import output_dir_from_context
 from .plot import infer_plot_metric_with_llm
 from ..skills.rag_skill.scripts.extract_keyword import AmbiguousQueryError
+
+
+def _extract_yaml_from_query(state: GlobalState) -> Optional[str]:
+    """Scan the user's original query for a .yaml/.yml file path that exists on disk."""
+    query = (state.get("user_input") or state.get("input") or "").strip()
+    for match in re.finditer(r"[\w./\-\\]+\.(?:yaml|yml)", query, re.IGNORECASE):
+        candidate = Path(match.group(0).strip())
+        if candidate.exists():
+            return str(candidate.resolve())
+    return None
 
 
 def valid_data_file_path(path_or_name: str, uploaded_files: list[str]) -> tuple[bool, Optional[str]]:
@@ -171,18 +182,26 @@ def _validate_simulation_input_tools(state: GlobalState, tool_input: dict) -> tu
     data_file = (tool_input.get("data_file") or tool_input.get("file_path") or "").strip()
     if not data_file and state.get("uploaded_files"):
         for u in state.get("uploaded_files", []):
-            if (u or "").strip().upper().endswith(".DATA"):
+            ul = (u or "").strip().lower()
+            if ul.endswith(".data") or ul.endswith(".yaml") or ul.endswith(".yml"):
                 tool_input["data_file"] = tool_input.get("data_file") or u.strip()
                 tool_input["file_path"] = tool_input.get("file_path") or u.strip()
                 data_file = u.strip()
                 break
+    if not data_file:
+        yaml_from_query = _extract_yaml_from_query(state)
+        if yaml_from_query:
+            tool_input["file_path"] = yaml_from_query
+            tool_input["data_file"] = yaml_from_query
+            data_file = yaml_from_query
     if not (tool_input.get("data_file") or tool_input.get("file_path")):
-        return False, ("Tool requires a simulator primary input file. Please upload a .DATA file or provide file_path/data_file.")
+        return False, ("Tool requires a simulator input file (.DATA) or optimization config (.yaml). Please upload a file or provide file_path/data_file.")
     path = (tool_input.get("data_file") or tool_input.get("file_path") or "").strip()
-    if path and not path.upper().endswith(".DATA"):
+    pl = path.lower()
+    if path and not path.upper().endswith(".DATA") and not pl.endswith(".yaml") and not pl.endswith(".yml"):
         return False, (
-            "Tool requires a simulator primary input file with extension .DATA. "
-            "The provided file does not have a .DATA extension (e.g. .pdf is not supported)."
+            "Tool requires a simulator input file (.DATA) or optimization config (.yaml/.yml). "
+            "The provided file does not have a supported extension."
         )
     return True, None
 

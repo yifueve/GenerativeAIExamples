@@ -27,7 +27,40 @@ import yaml
 from langchain_core.tools import tool
 from pydantic.v1 import BaseModel, Field
 
-from simulator_agent.skills.simulation_skill.scripts.inventory_sim import validate_config
+
+
+def _parse_cflp_config(filename: str, cfg: dict) -> str:
+    """Parse a CFLP optimization config (warehouses/customers/transport_costs format)."""
+    warehouses = cfg.get("warehouses", [])
+    customers = cfg.get("customers", [])
+    transport_costs = cfg.get("transport_costs", {})
+    objective = cfg.get("objective", {})
+    algorithm = cfg.get("algorithm", {})
+    paths = cfg.get("paths", {})
+
+    output = f"CFLP optimization config: {filename}\n"
+    output += f"  Algorithm: {algorithm.get('type', '?')}\n"
+    output += f"  Objective: {objective.get('mode', '?')}\n"
+    if paths:
+        output += f"  Case: {paths.get('case_name', '?')}\n\n"
+    else:
+        output += "\n"
+
+    output += f"Warehouses ({len(warehouses)}):\n"
+    for w in warehouses:
+        output += f"  {w.get('id', '?')}: location={w.get('location', '?')}, capacity={w.get('capacity', '?')}, fixed_cost={w.get('fixed_cost', '?')}\n"
+
+    output += f"\nCustomers ({len(customers)}):\n"
+    for c in customers:
+        output += f"  {c.get('id', '?')}: location={c.get('location', '?')}, demand={c.get('demand', '?')}\n"
+
+    if transport_costs:
+        output += f"\nTransport costs ({len(transport_costs)} routes):\n"
+        for route, cost in transport_costs.items():
+            output += f"  {route}: {cost}\n"
+
+    output += "\nValidation: ✓ CFLP config parsed successfully"
+    return output
 
 
 class ParseDataFileInput(BaseModel):
@@ -60,7 +93,12 @@ def parse_simulation_input_file(file_path: str) -> str:
         if not isinstance(cfg, dict):
             return "Error: File is not a valid YAML mapping."
 
+        # CFLP optimization config format (warehouses, customers, transport_costs)
+        if "warehouses" in cfg or "customers" in cfg:
+            return _parse_cflp_config(path.name, cfg)
+
         # Validation
+        from simulator_agent.skills.simulation_skill.scripts.inventory_sim import validate_config
         errors = validate_config(cfg)
 
         sc = cfg.get("scenario", {})

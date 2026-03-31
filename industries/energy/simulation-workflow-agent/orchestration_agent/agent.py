@@ -137,6 +137,21 @@ def route_query_llm(query: str, llm_cfg: dict[str, Any]) -> str:
     return "sim"
 
 
+def _extract_base_config_from_query(query: str) -> str | None:
+    """Extract base config (e.g. testcase_cflp_AGENT_GENERATED.yaml) from query if present."""
+    clean = query.replace("`", "")
+    # Match any .yaml/.yml path that looks like an optimization base config (not the workflow conf)
+    for match in re.finditer(r"[\w./\-\\]+\.(?:yaml|yml)", clean, re.IGNORECASE):
+        candidate = match.group(0).strip()
+        # Skip workflow agent conf files — those are workflow configs, not base configs
+        if "workflow_agent/conf/" in candidate or candidate.endswith("config.yaml"):
+            continue
+        p = resolve_path(candidate)
+        if p.exists():
+            return str(p)
+    return None
+
+
 def _extract_workflow_config_from_query(query: str) -> str | None:
     """Extract workflow config path from query if present."""
     clean = query.replace("`", "")
@@ -317,7 +332,11 @@ def _run_orchestrator_interactive(
         print(f"[Orchestrator] Routing to {target}_agent", file=sys.stderr)
 
         if target == "workflow":
-            base_config_raw = files[0] if files else workflow_base_config
+            base_config_raw = (
+                _extract_base_config_from_query(line)
+                or (files[0] if files else None)
+                or workflow_base_config
+            )
             base_config = str(resolve_path(base_config_raw)) if base_config_raw else None
             run_workflow_agent(
                 base_config,
@@ -439,7 +458,11 @@ def main() -> int:
     print(f"[Orchestrator] Routing to {target}_agent", file=sys.stderr)
 
     if target == "workflow":
-        base_config_raw = args.files[0] if args.files else workflow_base_config
+        base_config_raw = (
+            _extract_base_config_from_query(query)
+            or (args.files[0] if args.files else None)
+            or workflow_base_config
+        )
         base_config = str(resolve_path(base_config_raw)) if base_config_raw else None
 
         return run_workflow_agent(

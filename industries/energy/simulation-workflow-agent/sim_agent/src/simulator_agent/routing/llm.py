@@ -77,7 +77,7 @@ def classify_query_llm(query: str, state: GlobalState) -> dict[str, Any]:
         )
         out: dict[str, Any] = {"skill": skill_name or "final_response", "tool": tool_name, "tool_input": tool_input}
         if i + 1 < len(steps):
-            out["pending_steps"] = steps[i + 1:]
+            out["pending_steps"] = steps[i:]
         return out
 
     if steps:

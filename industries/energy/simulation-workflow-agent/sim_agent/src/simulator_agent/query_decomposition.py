@@ -251,8 +251,17 @@ If a query requires capabilities beyond these skills, you MUST use the "none" sk
 - "Execute the scenario for data/example_cases/supply_chain/baseline.yaml" → run_and_heal
 - "Simulate the DrugY NE disruption scenario" (with uploaded .yaml) → run_and_heal
 
+### 2.4a Config edit only (modify, no run)
+**Condition:** User message contains a .yaml config path AND modification intent (e.g. "change", "set", "update", "increase", "decrease") BUT NO run/test/simulate/execute intent. This includes optimization configs (CFLP, GA, PSO) like testcase_cflp.yaml.
+**Tool chain:** parse_simulation_input_file → modify_simulation_input_file → final_response
+**IMPORTANT: Do NOT add run_and_heal. The user only wants the file changed, not executed.**
+**Examples:**
+- "Change demand for C_NE to 700 in testcase_cflp.yaml" → parse_simulation_input_file → modify_simulation_input_file → final_response
+- "Set warehouse capacity for W_Boston to 1500 in testcase_cflp.yaml" → parse_simulation_input_file → modify_simulation_input_file → final_response
+- "Update the fixed_cost for W_Chicago in testcase_cflp.yaml" → parse_simulation_input_file → modify_simulation_input_file → final_response
+
 ### 2.4 Scenario test (modify then run)
-**Condition:** User message contains .yaml scenario config path AND modification intent (e.g. "increase demand", "change lead time", "add disruption", "test a scenario with...").
+**Condition:** User message contains .yaml scenario config path AND BOTH modification intent AND run/test/simulate/execute intent.
 **Tool chain:**
 - Base chain: parse_simulation_input_file → tracelink_docs (relevant parameter) → dscsa_regulations (if compliance-related) → modify_simulation_input_file → run_and_heal
 - If confirm_before_modify is true: insert hitl_confirm_modify before modify_simulation_input_file (wait for user "yes"/"apply")
@@ -301,13 +310,13 @@ If a query requires capabilities beyond these skills, you MUST use the "none" sk
 
 ### 3.2 Scenario test chain (continued)
 **Condition:** Last tool in scenario chain, continue automatically.
-- last_tool = parse_simulation_input_file → tracelink_docs
+- last_tool = parse_simulation_input_file → tracelink_docs (only if original chain was 2.4 scenario test; if chain was 2.4a config-edit-only, go to modify_simulation_input_file → final_response)
 - last_tool = tracelink_docs → dscsa_regulations
 - last_tool = dscsa_regulations → (hitl_confirm_modify if confirm_before_modify=true, wait for "yes"/"apply") → modify_simulation_input_file
-- last_tool = modify_simulation_input_file → (hitl_confirm_run if confirm_before_run=true, wait for "yes"/"run") → run_and_heal
+- last_tool = modify_simulation_input_file → ONLY add run_and_heal if the original user intent included "run", "test", "simulate", or "execute". If the user only asked to change/update/set a value, go to final_response directly.
 **HITL Notes:**
 - If confirm_before_modify is true and last_tool = simulator_examples: call hitl_confirm_modify, wait for user confirmation before modify_simulation_input_file
-- If confirm_before_run is true and last_tool = modify_simulation_input_file: call hitl_confirm_run, wait for user confirmation before run_and_heal
+- If confirm_before_run is true and last_tool = modify_simulation_input_file AND run intent exists: call hitl_confirm_run, wait for user confirmation before run_and_heal
 
 ### 3.3 After run_and_heal
 **Condition:** Last message is ToolMessage from run_and_heal.
@@ -336,7 +345,7 @@ If a query requires capabilities beyond these skills, you MUST use the "none" sk
    - If has_tool_output = true → Use Section 3 routing (Follow-up)
 
 1. For First Message (Section 2):
-   - Check conditions in order: 2.0 → 2.1 → 2.2 → 2.3 → 2.4 → 2.5 → 2.5a → 2.5b → 2.6
+   - Check conditions in order: 2.0 → 2.1 → 2.2 → 2.3 → 2.4a → 2.4 → 2.5 → 2.5a → 2.5b → 2.6
    - Apply the first matching condition
    - Build tool chain according to the matched section
 
@@ -363,7 +372,8 @@ If a query requires capabilities beyond these skills, you MUST use the "none" sk
 5. Special Cases:
    - Network map/geographic visualization requests → final_response only (no tools in catalog; GUI suggestion)
    - Direct run with no modification → run_and_heal (no confirm; confirm_before_run applies only to scenario test)
-   - Scenario test → parse_simulation_input_file → tracelink_docs → dscsa_regulations → (hitl_confirm_modify if confirm_before_modify=true) → modify_simulation_input_file → (hitl_confirm_run if confirm_before_run=true) → run_and_heal → final_response
+   - Config edit only (modify without run intent, including CFLP/optimization configs) → parse_simulation_input_file → modify_simulation_input_file → final_response (NO run_and_heal)
+   - Scenario test (modify + explicit run/test/simulate intent) → parse_simulation_input_file → tracelink_docs → dscsa_regulations → (hitl_confirm_modify if confirm_before_modify=true) → modify_simulation_input_file → (hitl_confirm_run if confirm_before_run=true) → run_and_heal → final_response
    - Plot/compare results → plot_summary_metric or plot_compare_summary_metric → final_response (no confirmation before plot)
    - Documentation questions → tracelink_docs → (dscsa_regulations) → final_response
    - "Why" questions (stockouts, delays, compliance gaps, bottlenecks) with case path → run_flow_diagnostics → final_response. Do NOT refuse with "no simulation run" — use the tool; it validates files.
@@ -675,6 +685,39 @@ Response:
         "skill_name": null,
         "sub_query": "Summarize the scenario test: confirm modification applied, report simulation result (success/failure), and provide key metrics if available",
         "rationale": "Summarize the scenario test results. According to Section 2.4, end with final_response."
+      }}
+    ]
+  }}
+]
+
+Example 4c - Section 2.4a: Config edit only (no run intent)
+User: "Change the demand for C_NE to 700 in workflow_agent/workflow/optimization/conf/testcase_cflp.yaml"
+Conversation: [] (no tool output)
+Response:
+[
+  {{
+    "multi_steps": true,
+    "output_steps": [
+      {{
+        "step_nr": 1,
+        "tool_name": "parse_simulation_input_file",
+        "skill_name": "input_file_skill",
+        "sub_query": "Parse workflow_agent/workflow/optimization/conf/testcase_cflp.yaml to understand its structure and locate the C_NE customer demand field",
+        "rationale": "Config edit requires reading the file first. According to Section 2.4a, start with parse_simulation_input_file."
+      }},
+      {{
+        "step_nr": 2,
+        "tool_name": "modify_simulation_input_file",
+        "skill_name": "input_file_skill",
+        "sub_query": "Modify workflow_agent/workflow/optimization/conf/testcase_cflp.yaml: set demand for C_NE to 700, output to testcase_cflp_AGENT_GENERATED.yaml in same directory",
+        "rationale": "Apply the value change. According to Section 2.4a, call modify_simulation_input_file. No run_and_heal — user only asked to change the config."
+      }},
+      {{
+        "step_nr": 3,
+        "tool_name": "final_response",
+        "skill_name": null,
+        "sub_query": "Confirm the config was updated: C_NE demand set to 700 in testcase_cflp_AGENT_GENERATED.yaml",
+        "rationale": "Summarize the edit. According to Section 2.4a, end with final_response (no run_and_heal)."
       }}
     ]
   }}
@@ -1074,8 +1117,19 @@ def _fallback_routing(
         data_file_match = re.search(r'[\w/\.-]+\.(yaml|yml|DATA)', user_input, re.IGNORECASE)
         data_file_path = data_file_match.group(0) if data_file_match else "SCENARIO_CONFIG_PATH"
 
-        if has_modification:
-            # Section 2.4: Scenario test
+        has_run_intent = any(kw in user_lower for kw in run_keywords)
+        if has_modification and not has_run_intent:
+            # Section 2.4a: Config edit only (no run)
+            return [{
+                "multi_steps": True,
+                "output_steps": [
+                    {"step_nr": 1, "tool_name": "parse_simulation_input_file", "skill_name": "input_file_skill", "sub_query": f"Parse {data_file_path} to understand its structure and locate the parameter to change", "rationale": "Fallback: Config edit only (Section 2.4a) - parse file first"},
+                    {"step_nr": 2, "tool_name": "modify_simulation_input_file", "skill_name": "input_file_skill", "sub_query": f"Modify {data_file_path} according to user request, output to new _AGENT_GENERATED.yaml file", "rationale": "Fallback: Apply modification (Section 2.4a) - no run_and_heal"},
+                    {"step_nr": 3, "tool_name": "final_response", "skill_name": None, "sub_query": "Confirm the config was updated and show the output file path", "rationale": "Fallback: Summarize edit (Section 2.4a)"}
+                ]
+            }]
+        elif has_modification and has_run_intent:
+            # Section 2.4: Scenario test (modify then run)
             return [{
                 "multi_steps": True,
                 "output_steps": [
