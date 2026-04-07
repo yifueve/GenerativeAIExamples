@@ -27,10 +27,10 @@ warehouses:
 customers:
   - id: C_NE
     location: "Northeast Region (NE)"
-    demand: 700
+    demand: 500
   - id: C_Midwest
     location: "Midwest Region"
-    demand: 600
+    demand: 1000
   - id: C_West
     location: "West Region"
     demand: 400
