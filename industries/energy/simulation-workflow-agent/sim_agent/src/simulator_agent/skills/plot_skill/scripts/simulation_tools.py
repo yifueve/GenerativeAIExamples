@@ -95,57 +95,39 @@ class NotifyOnCompletionInput(BaseModel):
     )
 
 
-class PlotSummaryMetricInput(BaseModel):
-    output_dir: str = Field(..., description="Directory containing simulation output files")
-    metric_request: str = Field(
+class PlotTransportationAssignmentInput(BaseModel):
+    results_file: str = Field(
         ...,
         description=(
-            "User request or summary keyword(s). For multiple metrics on one plot use comma-separated keywords, e.g. 'FOPT, FWPT' or 'FOPT,FWPT'."
-        ),
-    )
-    data_file: Optional[str] = Field(
-        default=None,
-        description=(
-            "Path to the DATA file (or .SMSPEC) for the case to plot. "
-            "When provided, uses this case instead of the first .SMSPEC in output_dir."
-        ),
-    )
-    manual_hint: Optional[str] = Field(
-        default=None,
-        description="Optional manual context or retrieved snippet to help map keywords",
-    )
-    save_path: Optional[str] = Field(
-        default=None, description="Optional path to save the plot image"
-    )
-
-
-class PlotCompareSummaryMetricInput(BaseModel):
-    output_dir: str = Field(
-        ...,
-        description=(
-            "Directory to save the plot and, when not using case_paths, directory containing .SMSPEC files to compare."
-        ),
-    )
-    metric_request: str = Field(
-        ...,
-        description="Summary keyword to compare, e.g. FOPT (cumulative oil), FOPR (oil rate)",
-    )
-    case_stems: Optional[str] = Field(
-        default=None,
-        description=(
-            "Comma-separated case name stems to compare (e.g. SPE10_TOPLAYER,SPE10_TOPLAYER_AGENT_GENERATED). "
-            "If omitted and case_paths not set, all .SMSPEC files in output_dir are compared."
-        ),
-    )
-    case_paths: Optional[str] = Field(
-        default=None,
-        description=(
-            "Comma-separated paths to DATA files (or .SMSPEC) for the cases to compare. "
-            "Use when comparing cases from different directories (e.g. BASE/SPE10.DATA and INFILL/SPE10_INFILL.DATA)."
+            "Path to a CFLP optimization results JSON file containing best_solution.open_warehouses "
+            "and best_solution.flows (e.g. CFLP_DrugY_experiment_..._results.json)."
         ),
     )
     save_path: Optional[str] = Field(
-        default=None, description="Optional path to save the comparison plot image"
+        default=None,
+        description="Optional path to save the plot image (default: plot_transportation_assignment.png next to results_file).",
+    )
+
+
+class PlotSupplyChainKpisInput(BaseModel):
+    results_file: str = Field(
+        ...,
+        description=(
+            "Path to a supply chain disruption simulation results JSON file containing kpis and node_results "
+            "(e.g. drugY_NE_disruption_results.json)."
+        ),
+    )
+    metrics: Optional[str] = Field(
+        default=None,
+        description=(
+            "Comma-separated KPI names to plot. Available: order_fulfillment_rate, inventory_doh_mean, "
+            "shipment_delay_mean, compliance_rate, cost_per_unit, stockout_events. "
+            "Defaults to all six."
+        ),
+    )
+    save_path: Optional[str] = Field(
+        default=None,
+        description="Optional path to save the plot image (default: plot_supply_chain_kpis.png next to results_file).",
     )
 
 
@@ -669,310 +651,274 @@ def notify_on_completion(
         return f"Error sending notification: {str(e)}"
 
 
-def _resolve_metric_keywords(
-    metric_request: str, manual_hint: Optional[str], available: set
-) -> list:
-    """Resolve metric_request (possibly comma-separated) to list of summary keywords present in available."""
-    raw = [s.strip() for s in metric_request.split(",") if s.strip()]
-    keywords = []
-    for request in raw:
-        keyword = None
-        if request in available:
-            keyword = request
-        if not keyword and manual_hint:
-            candidates = re.findall(r"\b[A-Z]{3,6}\b", manual_hint)
-            for candidate in candidates:
-                if candidate in available and candidate not in keywords:
-                    keyword = candidate
-                    break
-        if keyword and keyword not in keywords:
-            keywords.append(keyword)
-    return keywords
+_ALL_KPIS = [
+    "order_fulfillment_rate",
+    "inventory_doh_mean",
+    "shipment_delay_mean",
+    "compliance_rate",
+    "cost_per_unit",
+    "stockout_events",
+]
+
+_KPI_LABELS = {
+    "order_fulfillment_rate": "Order Fulfillment Rate",
+    "inventory_doh_mean": "Inventory DoH (days)",
+    "shipment_delay_mean": "Shipment Delay (days)",
+    "compliance_rate": "Compliance Rate",
+    "cost_per_unit": "Cost per Unit ($)",
+    "stockout_events": "Stockout Events",
+}
+
+# Node type colors for transportation network
+_NODE_COLORS = {
+    "MFG": "#1f77b4",   # blue  – manufacturer
+    "DC":  "#ff7f0e",   # orange – distribution centre
+    "W":   "#ff7f0e",   # orange – warehouse (CFLP)
+    "C":   "#2ca02c",   # green  – customer / pharmacy
+    "PHARM": "#2ca02c", # green
+}
 
 
-@tool("plot_summary_metric", args_schema=PlotSummaryMetricInput)
-def plot_summary_metric(
-    output_dir: str,
-    metric_request: str,
-    data_file: Optional[str] = None,
-    manual_hint: Optional[str] = None,
-    save_path: Optional[str] = None,
-) -> str:
-    """
-    Plot one or more summary metrics from OPM Flow outputs on the same plot.
-    Pass comma-separated keywords for multiple metrics (e.g. FOPT, FWPT).
-    When data_file is provided, uses that case's .SMSPEC; otherwise uses the first .SMSPEC in output_dir.
-    """
+def _open_plot(path: str) -> None:
+    """Open a saved plot file with the OS default image viewer."""
+    import subprocess, sys
     try:
-        output_path = Path(output_dir)
-        if not output_path.exists():
-            return f"Error: Output directory not found: {output_dir}"
-
-        smspec_path = None
-        if (data_file or "").strip():
-            raw = (data_file or "").strip()
-            upper = raw.upper()
-            if upper.endswith(".SMSPEC"):
-                resolved = _resolve_data_file_path(raw)
-                if resolved.exists():
-                    smspec_path = resolved
-            elif upper.endswith(".DATA"):
-                resolved = _resolve_data_file_path(raw)
-                candidate = resolved.parent / f"{resolved.stem}.SMSPEC"
-                if candidate.exists():
-                    smspec_path = candidate
-                else:
-                    return (
-                        f"Error: .SMSPEC not found for {resolved.stem} at {candidate}. "
-                        "Run the simulation for that case first."
-                    )
-            else:
-                return f"Error: data_file must be a .DATA or .SMSPEC path, got: {raw}"
-
-        if smspec_path is None:
-            smspec_files = sorted(output_path.glob("*.SMSPEC"))
-            if not smspec_files:
-                return f"Error: No .SMSPEC file found in {output_dir}"
-            smspec_path = smspec_files[0]
-
-        # Import locally to avoid hard dependency if plotting isn't used
-        import matplotlib.pyplot as plt  # noqa: WPS433
-        from ...results_skill.scripts.ecl_reader import EclReader
-
-        reader = EclReader(str(smspec_path))
-        available = set(reader.list_smry_keys())
-
-        keywords = _resolve_metric_keywords(metric_request, manual_hint, available)
-        if not keywords:
-            sample = ", ".join(sorted(list(available))[:25])
-            return (
-                "Error: Requested metric(s) not found in summary keys. "
-                f"Request: {metric_request}\n"
-                f"Sample keys: {sample}\n"
-                "Tip: Use comma-separated keywords (e.g. FOPT, FWPT) for multiple metrics; "
-                "or use simulator_manual retriever and pass manual_hint."
-            )
-
-        smry = reader.read_smry_vectors(keywords)
-        time_len = len(smry[keywords[0]])
-        time_values, time_axis_label = _smry_time_values(smry, time_len)
-
-        plt.figure(figsize=(10, 6))
-        for keyword in keywords:
-            metric_values = smry[keyword]
-            if len(metric_values) != time_len:
-                continue
-            line_color = _summary_metric_color(keyword)
-            plt.plot(time_values, metric_values, label=keyword, color=line_color)
-        plt.xlabel(time_axis_label)
-        plt.ylabel(", ".join(keywords) if len(keywords) > 1 else keywords[0])
-        plt.title("Summary metric: " + keywords[0] if len(keywords) == 1 else "Summary metrics: " + ", ".join(keywords))
-        plt.legend()
-
-        name_part = "_".join(keywords)
-        save_path = save_path or str(output_path / f"plot_{name_part}.png")
-        save_path = str(Path(save_path).resolve())
-        # Ensure parent directory exists
-        Path(save_path).parent.mkdir(parents=True, exist_ok=True)
-        plt.savefig(save_path, dpi=150, bbox_inches="tight")
-        plt.close()
-
-        return f"Plot saved to: {save_path}"
-
-    except Exception as e:
-        return f"Error plotting summary metric: {str(e)}"
-
-
-def _summary_metric_color(keyword: str) -> str:
-    """Return line color for summary metric: green=oil, blue=water, red=gas. ECL convention: FO/FOPT/FOPR=oil, FW/FWPT/FWPR=water, FG/FGPT/FGPR=gas."""
-    k = keyword.upper()
-    if k.startswith("FO") or k.startswith("WO") or "OPT" in k or "OPR" in k or "OIR" in k or "OIT" in k:
-        return "green"
-    if (
-        k.startswith("FW")
-        or k.startswith("WW")
-        or "WPT" in k
-        or "WPR" in k
-        or "WCT" in k
-        or "WIR" in k
-        or "WIT" in k
-    ):
-        return "blue"
-    if k.startswith("FG") or k.startswith("WG") or "GPT" in k or "GPR" in k or "GOR" in k or "VIR" in k or "VIT" in k:
-        return "red"
-    return "gray"
-
-
-def _smry_time_values(smry, length: int):
-    """Get time axis from summary dict (EclReader.read_smry_vectors); return (time_values, time_axis_label). Prefer TIME (days), then dates(), else step index."""
-    # 1) Prefer summary vector "TIME" (simulation time in days) — same length as other summary vectors
-    try:
-        if "TIME" in smry.keys():
-            t = smry["TIME"]
-            if t is not None and len(t) == length:
-                return list(t), "Time (days)"
+        if sys.platform == "darwin":
+            subprocess.Popen(["open", path])
+        elif sys.platform == "win32":
+            subprocess.Popen(["start", path], shell=True)
+        else:
+            subprocess.Popen(["xdg-open", path])
     except Exception:
         pass
-    # 2) Try dates() / get_dates() for calendar date x-axis
-    for attr in ("dates", "get_dates", "time"):
-        if hasattr(smry, attr):
-            fn = getattr(smry, attr)
-            if callable(fn):
-                try:
-                    time_values = fn()
-                    if time_values is not None and len(time_values) == length:
-                        return list(time_values), "Date"
-                except Exception:
-                    continue
-            else:
-                time_values = fn
-                if time_values is not None and len(time_values) == length:
-                    return list(time_values), "Date"
-                break
-    # 3) Fallback: report step index
-    return list(range(length)), "Time step"
 
 
-def _resolve_compare_case_paths(case_paths_str: str) -> tuple[list[Path], list[str]]:
-    """Resolve comma-separated paths (.DATA or .SMSPEC) to (list of .SMSPEC Paths, list of stems)."""
-    smspec_files = []
-    stems = []
-    for raw in case_paths_str.split(","):
-        raw = raw.strip()
-        if not raw:
-            continue
-        upper = raw.upper()
-        if upper.endswith(".SMSPEC"):
-            resolved = _resolve_data_file_path(raw)
-            if not resolved.exists():
-                raise FileNotFoundError(f".SMSPEC file not found: {raw} (resolved: {resolved})")
-            smspec_files.append(resolved)
-            stems.append(resolved.stem)
-        elif upper.endswith(".DATA"):
-            resolved = _resolve_data_file_path(raw)
-            if not resolved.exists():
-                raise FileNotFoundError(f"DATA file not found: {raw} (resolved: {resolved})")
-            out_dir = resolved.parent
-            stem = resolved.stem
-            smspec_path = out_dir / f"{stem}.SMSPEC"
-            if not smspec_path.exists():
-                raise FileNotFoundError(
-                    f".SMSPEC not found for {stem} at {smspec_path}. Run the simulation for that case first."
-                )
-            smspec_files.append(smspec_path)
-            stems.append(stem)
-        else:
-            raise ValueError(
-                f"case_paths entries must be paths to .DATA or .SMSPEC files, got: {raw}"
-            )
-    return smspec_files, stems
+def _node_color(name: str) -> str:
+    for prefix, color in _NODE_COLORS.items():
+        if name.upper().startswith(prefix):
+            return color
+    return "#9467bd"
 
 
-@tool("plot_compare_summary_metric", args_schema=PlotCompareSummaryMetricInput)
-def plot_compare_summary_metric(
-    output_dir: str,
-    metric_request: str,
-    case_stems: Optional[str] = None,
-    case_paths: Optional[str] = None,
+@tool("plot_transportation_assignment", args_schema=PlotTransportationAssignmentInput)
+def plot_transportation_assignment(
+    results_file: str,
     save_path: Optional[str] = None,
 ) -> str:
     """
-    Plot a summary metric for two or more cases on the same axes for comparison.
-    Use case_paths when comparing cases from different directories (e.g. two DATA file paths).
+    Plot the supply chain transportation assignment from a CFLP optimization results JSON.
+    Draws a bipartite network with open warehouses on the left and customers on the right,
+    with edges labelled by flow volume and a bar chart of flows below.
     """
     try:
-        output_path = Path(output_dir)
+        import json
+        import matplotlib.pyplot as plt
+        import matplotlib.patches as mpatches
+        import numpy as np
 
-        if case_paths and case_paths.strip():
-            try:
-                smspec_files, stems = _resolve_compare_case_paths(case_paths.strip())
-            except (FileNotFoundError, ValueError) as e:
-                return f"Error: {e}"
-            requested_stems = stems
-            # Use first case's output dir for saving when output_dir does not exist (e.g. host path)
-            if not output_path.exists() and smspec_files:
-                output_path = smspec_files[0].parent
-        else:
-            if not output_path.exists():
-                return f"Error: Output directory not found: {output_dir}"
-            if case_stems and case_stems.strip():
-                requested_stems = [s.strip() for s in case_stems.split(",") if s.strip()]
-                smspec_files = []
-                for stem in requested_stems:
-                    f = output_path / f"{stem}.SMSPEC"
-                    if f.exists():
-                        smspec_files.append(f)
-                stems = [f.stem for f in smspec_files]
-                if not smspec_files:
-                    return (
-                        "Error: No case .SMSPEC files found. "
-                        "For comparison, run both the baseline and the modified case in the same output directory."
-                    )
-            else:
-                requested_stems = []
-                smspec_files = sorted(output_path.glob("*.SMSPEC"))
-                if not smspec_files:
-                    return f"Error: No .SMSPEC file found in {output_dir}"
-                stems = [f.stem for f in smspec_files]
+        results_path = Path(results_file)
+        if not results_path.exists():
+            return f"Error: Results file not found: {results_file}"
 
-        import matplotlib.pyplot as plt  # noqa: WPS433
-        from ...results_skill.scripts.ecl_reader import EclReader
+        with results_path.open("r", encoding="utf-8") as f:
+            data = json.load(f)
 
-        request = metric_request.strip().upper()
-        series = []  # (stem, time_values, metric_values, time_label)
-        keyword = None
+        best = data.get("best_solution", {})
+        open_warehouses = best.get("open_warehouses", [])
+        flows: Dict[str, float] = best.get("flows", {})
+        total_cost = best.get("objective") or data.get("best_objective")
+        opt_summary = data.get("optimization_summary", {})
 
-        for smspec_file, stem in zip(smspec_files, stems):
-            reader = EclReader(str(smspec_file))
-            available = set(reader.list_smry_keys())
-            if keyword is None:
-                if request in available:
-                    keyword = request
-                else:
-                    return (
-                        f"Error: Metric '{metric_request}' not found in case {stem}. "
-                        f"Sample keys: {', '.join(sorted(available)[:15])}"
-                    )
-            elif keyword not in available:
-                return (
-                    f"Error: Metric '{keyword}' not in case {stem}. "
-                    f"Sample keys: {', '.join(sorted(available)[:15])}"
-                )
-            smry = reader.read_smry_vectors([keyword])
-            metric_values = smry[keyword]
-            time_values, time_label = _smry_time_values(smry, len(metric_values))
-            series.append((stem, time_values, metric_values, time_label))
+        if not flows:
+            return "Error: No flow assignments found in results file."
 
-        if not series:
-            return "Error: No series to plot."
+        # Parse flows into (warehouse, customer, volume)
+        edges = []
+        customers = []
+        for key, vol in flows.items():
+            if "->" in key:
+                src, dst = key.split("->", 1)
+                edges.append((src.strip(), dst.strip(), float(vol)))
+                if dst.strip() not in customers:
+                    customers.append(dst.strip())
 
-        time_axis_label = series[0][3]
-        line_color = _summary_metric_color(keyword)
-        # Different linestyles per case so multiple series are distinguishable (same metric color)
-        linestyles = ["-", "--", "-.", ":"]  # solid, dashed, dashdot, dotted
-        plt.figure(figsize=(10, 6))
-        for i, (stem, time_values, metric_values, _) in enumerate(series):
-            ls = linestyles[i % len(linestyles)]
-            plt.plot(time_values, metric_values, label=stem, color=line_color, linestyle=ls)
-        plt.xlabel(time_axis_label)
-        plt.ylabel(keyword)
-        plt.title(f"Comparison: {keyword}")
-        plt.legend()
-        plt.grid(True, alpha=0.3)
+        warehouses = open_warehouses or sorted({e[0] for e in edges})
+        customers = sorted(customers)
 
-        save_path = save_path or str(output_path / f"plot_compare_{keyword}.png")
-        save_path = str(Path(save_path).resolve())
-        # Ensure parent directory exists
-        Path(save_path).parent.mkdir(parents=True, exist_ok=True)
-        plt.savefig(save_path, dpi=150, bbox_inches="tight")
-        plt.close()
+        fig, (ax_net, ax_bar) = plt.subplots(
+            1, 2, figsize=(14, max(6, max(len(warehouses), len(customers)) * 1.2))
+        )
 
-        if case_stems and len(requested_stems) >= 2 and len(smspec_files) == 1:
-            return (
-                f"Comparison plot saved to: {save_path}\n"
-                f"(Only one case found: {stems[0]}. Run the baseline case in this directory to compare both.)"
+        # ── Network diagram ────────────────────────────────────────────────
+        wh_y = {w: i for i, w in enumerate(warehouses)}
+        cu_y = {c: i for i, c in enumerate(customers)}
+        max_vol = max(v for _, _, v in edges) if edges else 1.0
+
+        for w, c, vol in edges:
+            y0 = wh_y[w]
+            y1 = cu_y[c]
+            lw = 1.0 + 4.0 * vol / max_vol
+            ax_net.plot([0, 1], [y0, y1], lw=lw, alpha=0.6, color="#888888")
+            ax_net.text(0.5, (y0 + y1) / 2, f"{vol:,.0f}", ha="center", va="bottom",
+                        fontsize=7, color="#444444")
+
+        for w, y in wh_y.items():
+            ax_net.scatter(0, y, s=300, color=_node_color(w), zorder=5)
+            ax_net.text(-0.05, y, w, ha="right", va="center", fontsize=9)
+        for c, y in cu_y.items():
+            ax_net.scatter(1, y, s=300, color=_node_color(c), zorder=5)
+            ax_net.text(1.05, y, c, ha="left", va="center", fontsize=9)
+
+        ax_net.set_xlim(-0.5, 1.5)
+        ax_net.set_ylim(-0.8, max(len(warehouses), len(customers)) - 0.2)
+        ax_net.axis("off")
+        ax_net.set_title("Transportation Network", fontsize=11, fontweight="bold")
+
+        # Legend
+        legend_handles = [
+            mpatches.Patch(color=_node_color("W"), label="Warehouse / DC"),
+            mpatches.Patch(color=_node_color("C"), label="Customer"),
+        ]
+        ax_net.legend(handles=legend_handles, loc="lower center", fontsize=8)
+
+        # ── Bar chart of flows ─────────────────────────────────────────────
+        edge_labels = [f"{w}\n→{c}" for w, c, _ in edges]
+        vols = [v for _, _, v in edges]
+        colors = [_node_color(w) for w, _, _ in edges]
+        x = np.arange(len(edges))
+        bars = ax_bar.bar(x, vols, color=colors, edgecolor="white", linewidth=0.5)
+        ax_bar.bar_label(bars, labels=[f"{v:,.0f}" for v in vols], padding=3, fontsize=8)
+        ax_bar.set_xticks(x)
+        ax_bar.set_xticklabels(edge_labels, fontsize=8, rotation=30, ha="right")
+        ax_bar.set_ylabel("Flow Volume (units)")
+        ax_bar.set_title("Flow Volumes by Assignment", fontsize=11, fontweight="bold")
+        ax_bar.grid(axis="y", alpha=0.3)
+
+        # Cost annotation
+        cost_lines = []
+        if opt_summary.get("fixed_cost") is not None:
+            cost_lines.append(f"Fixed cost:     ${opt_summary['fixed_cost']:,.0f}")
+        if opt_summary.get("transport_cost") is not None:
+            cost_lines.append(f"Transport cost: ${opt_summary['transport_cost']:,.0f}")
+        if total_cost is not None:
+            cost_lines.append(f"Total cost:     ${total_cost:,.0f}")
+        if cost_lines:
+            ax_bar.text(
+                0.98, 0.97, "\n".join(cost_lines),
+                transform=ax_bar.transAxes, ha="right", va="top",
+                fontsize=8, family="monospace",
+                bbox=dict(boxstyle="round,pad=0.3", facecolor="#f5f5f5", alpha=0.8),
             )
-        return f"Comparison plot saved to: {save_path}"
+
+        scenario = results_path.stem
+        fig.suptitle(f"Transportation Assignment: {scenario}", fontsize=13, fontweight="bold")
+        plt.tight_layout()
+
+        out_path = save_path or str(results_path.parent / "plot_transportation_assignment.png")
+        out_path = str(Path(out_path).resolve())
+        Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+        plt.savefig(out_path, dpi=150, bbox_inches="tight")
+        plt.close()
+        _open_plot(out_path)
+        return f"Transportation assignment plot saved to: {out_path}"
 
     except Exception as e:
-        return f"Error plotting comparison: {str(e)}"
+        return f"Error plotting transportation assignment: {str(e)}"
+
+
+@tool("plot_supply_chain_kpis", args_schema=PlotSupplyChainKpisInput)
+def plot_supply_chain_kpis(
+    results_file: str,
+    metrics: Optional[str] = None,
+    save_path: Optional[str] = None,
+) -> str:
+    """
+    Plot supply chain KPI time series from a disruption simulation results JSON.
+    Renders a multi-panel figure with one subplot per requested KPI over the simulation horizon.
+    Available KPIs: order_fulfillment_rate, inventory_doh_mean, shipment_delay_mean,
+    compliance_rate, cost_per_unit, stockout_events.
+    """
+    try:
+        import json
+        import matplotlib.pyplot as plt
+
+        results_path = Path(results_file)
+        if not results_path.exists():
+            return f"Error: Results file not found: {results_file}"
+
+        with results_path.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        kpis = data.get("kpis", {})
+        if not kpis:
+            return "Error: No kpis section found in results file."
+
+        days = kpis.get("day") or kpis.get("step")
+        if days is None:
+            return "Error: kpis must contain a 'day' or 'step' array for the time axis."
+
+        requested = [m.strip() for m in metrics.split(",")] if metrics else _ALL_KPIS
+        available = [m for m in requested if m in kpis and m not in ("day", "step")]
+        missing = [m for m in requested if m not in kpis and m not in ("day", "step")]
+        if not available:
+            return (
+                f"Error: None of the requested metrics found in kpis. "
+                f"Available: {', '.join(k for k in kpis if k not in ('day', 'step'))}"
+            )
+
+        n = len(available)
+        ncols = 2
+        nrows = (n + 1) // ncols
+        fig, axes = plt.subplots(nrows, ncols, figsize=(13, 3.5 * nrows), squeeze=False)
+
+        kpi_colors = {
+            "order_fulfillment_rate": "#2ca02c",
+            "inventory_doh_mean":     "#1f77b4",
+            "shipment_delay_mean":    "#d62728",
+            "compliance_rate":        "#9467bd",
+            "cost_per_unit":          "#8c564b",
+            "stockout_events":        "#e377c2",
+        }
+
+        for idx, metric in enumerate(available):
+            ax = axes[idx // ncols][idx % ncols]
+            values = kpis[metric]
+            color = kpi_colors.get(metric, "#7f7f7f")
+            if metric == "stockout_events":
+                ax.bar(days, values, color=color, alpha=0.75, width=4)
+            else:
+                ax.plot(days, values, marker="o", markersize=4, color=color, linewidth=1.8)
+                ax.fill_between(days, values, alpha=0.1, color=color)
+            ax.set_xlabel("Day")
+            ax.set_ylabel(_KPI_LABELS.get(metric, metric))
+            ax.set_title(_KPI_LABELS.get(metric, metric), fontsize=10, fontweight="bold")
+            ax.grid(True, alpha=0.3)
+
+        # Hide unused subplots
+        for idx in range(n, nrows * ncols):
+            axes[idx // ncols][idx % ncols].set_visible(False)
+
+        scenario = data.get("scenario_name", results_path.stem)
+        summary = data.get("summary", {})
+        subtitle = (
+            f"OFR mean={summary.get('order_fulfillment_rate_mean', 'N/A'):.3f}  "
+            f"DoH mean={summary.get('inventory_doh_mean', 'N/A'):.1f}d  "
+            f"Cost/unit=${summary.get('cost_per_unit_mean', 'N/A'):.0f}"
+        ) if summary else ""
+        fig.suptitle(f"Supply Chain KPIs — {scenario}\n{subtitle}", fontsize=12, fontweight="bold")
+        plt.tight_layout()
+
+        out_path = save_path or str(results_path.parent / "plot_supply_chain_kpis.png")
+        out_path = str(Path(out_path).resolve())
+        Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+        plt.savefig(out_path, dpi=150, bbox_inches="tight")
+        plt.close()
+        _open_plot(out_path)
+
+        result_msg = f"Supply chain KPI plot saved to: {out_path}"
+        if missing:
+            result_msg += f"\n(Skipped unavailable metrics: {', '.join(missing)})"
+        return result_msg
+
+    except Exception as e:
+        return f"Error plotting supply chain KPIs: {str(e)}"

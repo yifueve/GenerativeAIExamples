@@ -36,8 +36,6 @@ def _needs_approval(state: GlobalState) -> bool:
     data_file = ((r.get("tool_input") or {}).get("data_file") or "").strip()
     if skill == "simulation_skill" and tool == "run_and_heal":
         return True
-    if skill == "plot_skill":
-        return True
     if tool == "run_and_heal" and data_file and "_FIXED" in data_file.upper():
         return True
     if skill == "results_skill" and tool == "run_flow_diagnostics":

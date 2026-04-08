@@ -38,7 +38,6 @@ from ..utils import (
     trim_chat_history,
     build_tool_input_for_step,
     validate_args_and_get_update,
-    infer_plot_metric_with_llm,
 )
 from ..routing import classify_query_llm, classify_query_rule_based
 from .edges import _needs_approval
@@ -147,15 +146,6 @@ def query_routing(state: GlobalState) -> dict[str, Any]:
             tool = rule_based["tool"]
             tool_input = rule_based.get("tool_input") or {}
             agent_final_from_llm = None
-
-    if not (tool_input.get("output_dir") or "").strip() and tool in (PLOT_SUMMARY_TOOL, PLOT_COMPARE_TOOL):
-        built = build_tool_input_for_step(
-            tool, query,
-            uploaded_files=uploaded,
-            base_simulation_file=state.get("base_simulation_file") or None,
-        )
-        if built.get("output_dir"):
-            tool_input = {**tool_input, **built}
 
     new_routing: list[SkillUsed] = [{"skill_name": skill, "tool_name": tool or "", "tool_input": tool_input}]
     LOG.debug("query_routing -> skill=%r, tool=%r, tool_input=%s", skill, tool, tool_input)

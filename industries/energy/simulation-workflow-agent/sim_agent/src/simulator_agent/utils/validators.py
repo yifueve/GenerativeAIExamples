@@ -24,9 +24,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from ..state import GlobalState, SkillUsed, PLOT_COMPARE_TOOL, PLOT_SUMMARY_TOOL, SIMULATION_INPUT_TOOLS
-from .paths import output_dir_from_context
-from .plot import infer_plot_metric_with_llm
-from ..skills.rag_skill.scripts.extract_keyword import AmbiguousQueryError
+from ..skills.plot_skill.scripts.simulation_tools import _ALL_KPIS
 
 
 def _extract_yaml_from_query(state: GlobalState) -> Optional[str]:
@@ -86,95 +84,78 @@ def _validate_rag(state: GlobalState, tool_input: dict) -> tuple[bool, Optional[
     return True, None
 
 
-def _validate_plot_summary(state: GlobalState, tool_input: dict) -> tuple[bool, Optional[str]]:
-    data_file = (tool_input.get("data_file") or tool_input.get("file_path") or "").strip()
-    if not data_file and (state.get("base_simulation_file") or "").strip():
-        data_file = (state.get("base_simulation_file") or "").strip()
-        tool_input["data_file"] = data_file
-    out_dir = output_dir_from_context(state, tool_input, data_file=data_file)
-    tool_input["output_dir"] = out_dir.strip("'\"") if out_dir else "."
-    if not (tool_input.get("metric_request") or "").strip():
-        user_input = (state.get("user_input") or state.get("input") or "").strip()
-        try:
-            inferred = infer_plot_metric_with_llm(user_input)
-        except AmbiguousQueryError as e:
-            return False, str(e)
-        if inferred:
-            tool_input["metric_request"] = inferred
-        else:
-            return False, (
-                "Could not determine the requested metric from your query. "
-                "Please specify the metric explicitly (e.g. FOPT, FOPR) or describe it clearly. "
-            )
-    return True, None
+def _validate_plot_transportation_assignment(state: GlobalState, tool_input: dict) -> tuple[bool, Optional[str]]:
+    """Validator for plot_transportation_assignment: ensure results_file is set."""
+    results_file = (tool_input.get("results_file") or "").strip()
 
+    # Try to resolve from uploaded files if not provided
+    if not results_file:
+        for u in (state.get("uploaded_files") or []):
+            ul = (u or "").strip().lower()
+            if ul.endswith(".json"):
+                tool_input["results_file"] = u.strip()
+                results_file = u.strip()
+                break
 
-def _validate_plot_compare(state: GlobalState, tool_input: dict) -> tuple[bool, Optional[str]]:
-    output_dir = (tool_input.get("output_dir") or "").strip()
-    case_stems = (tool_input.get("case_stems") or "").strip()
-    case_paths = (tool_input.get("case_paths") or "").strip()
-    base_simulation_file = (state.get("base_simulation_file") or "").strip()
-    uploaded = state.get("uploaded_files") or []
+    # Try to extract JSON path from user query
+    if not results_file:
+        query = (state.get("user_input") or state.get("input") or "").strip()
+        for match in re.finditer(r"[\w./\-\\]+\.json", query, re.IGNORECASE):
+            candidate = Path(match.group(0).strip())
+            if candidate.exists():
+                tool_input["results_file"] = str(candidate.resolve())
+                results_file = tool_input["results_file"]
+                break
 
-    # Derive output_dir from context (state, base file, or uploaded .DATA/.SMSPEC)
-    out_dir = output_dir or output_dir_from_context(state, tool_input, data_file=base_simulation_file)
-    if out_dir:
-        out_dir = out_dir.strip("'\"")
-    has_output_location = bool(out_dir and out_dir != ".")
-
-    if not has_output_location:
+    if not results_file:
         return False, (
-            "To compare summary metrics, provide an output directory (output_dir) where .SMSPEC files are located, "
-            "or upload .SMSPEC files / .DATA files that have corresponding .SMSPEC in the same directory. "
-            "You can also run simulations first to generate results."
+            "To plot the transportation assignment, provide the path to a CFLP results JSON file "
+            "(e.g. CFLP_DrugY_..._results.json). Upload the file or include the path in your query."
         )
-        if not case_stems and not case_paths:
-            agent_generated = [
-                u for u in uploaded
-                if (u or "").upper().endswith(".DATA") and "_AGENT_GENERATED" in (u or "")
-            ]
-            smspec_uploaded = [u for u in uploaded if (u or "").strip().upper().endswith(".SMSPEC")]
-            data_uploaded = [u for u in uploaded if (u or "").strip().upper().endswith(".DATA")]
-            if not agent_generated and not smspec_uploaded and not data_uploaded:
-                return False, (
-                    "To compare cases, you need either: (1) case_stems or case_paths, or "
-                    "(2) uploaded .SMSPEC files, or (3) uploaded .DATA files (with .SMSPEC in same dir after run), "
-                    "or (4) a base simulation and an uploaded scenario file (*_AGENT_GENERATED.DATA)."
-                )
     return True, None
 
 
-def _validate_plot_compare_full(state: GlobalState, tool_input: dict) -> tuple[bool, Optional[str]]:
-    valid, err = _validate_plot_compare(state, tool_input)
-    if not valid:
-        return False, err
-    data_file = (state.get("base_simulation_file") or "").strip()
-    out_dir = output_dir_from_context(state, tool_input, data_file=data_file)
-    tool_input["output_dir"] = out_dir.strip("'\"") if out_dir else "."
+def _validate_plot_supply_chain_kpis(state: GlobalState, tool_input: dict) -> tuple[bool, Optional[str]]:
+    """Validator for plot_supply_chain_kpis: ensure results_file is set and metrics are valid."""
+    results_file = (tool_input.get("results_file") or "").strip()
 
-    # Populate case_paths from uploaded files when not provided
-    if not (tool_input.get("case_paths") or "").strip() and not (tool_input.get("case_stems") or "").strip():
-        uploaded = state.get("uploaded_files") or []
-        smspec_files = [u.strip() for u in uploaded if (u or "").strip().upper().endswith(".SMSPEC")]
-        data_files = [u.strip() for u in uploaded if (u or "").strip().upper().endswith(".DATA")]
-        if smspec_files:
-            tool_input["case_paths"] = ",".join(smspec_files)
-        elif len(data_files) >= 2:
-            tool_input["case_paths"] = ",".join(data_files)
+    # Try to resolve from uploaded files
+    if not results_file:
+        for u in (state.get("uploaded_files") or []):
+            ul = (u or "").strip().lower()
+            if ul.endswith(".json"):
+                tool_input["results_file"] = u.strip()
+                results_file = u.strip()
+                break
 
-    if not (tool_input.get("metric_request") or "").strip():
-        user_input = (state.get("user_input") or state.get("input") or "").strip()
-        try:
-            inferred = infer_plot_metric_with_llm(user_input)
-        except AmbiguousQueryError as e:
-            return False, str(e)
-        if inferred:
-            tool_input["metric_request"] = inferred
-        else:
+    # Try to extract JSON path from user query
+    if not results_file:
+        query = (state.get("user_input") or state.get("input") or "").strip()
+        for match in re.finditer(r"[\w./\-\\]+\.json", query, re.IGNORECASE):
+            candidate = Path(match.group(0).strip())
+            if candidate.exists():
+                tool_input["results_file"] = str(candidate.resolve())
+                results_file = tool_input["results_file"]
+                break
+
+    if not results_file:
+        return False, (
+            "To plot supply chain KPIs, provide the path to a disruption simulation results JSON file "
+            f"(e.g. drugY_NE_disruption_results.json). "
+            f"Available KPIs: {', '.join(_ALL_KPIS)}."
+        )
+
+    # Validate requested metrics if provided
+    metrics_raw = (tool_input.get("metrics") or "").strip()
+    if metrics_raw:
+        requested = [m.strip() for m in metrics_raw.split(",") if m.strip()]
+        invalid = [m for m in requested if m not in _ALL_KPIS]
+        if invalid:
             return False, (
-                "Could not determine the requested metric from your query. "
-                "Please specify the metric explicitly (e.g. FOPT, FOPR) or describe it clearly. "
+                f"Unknown KPI(s): {', '.join(invalid)}. "
+                f"Available: {', '.join(_ALL_KPIS)}."
             )
+
     return True, None
 
 
@@ -233,8 +214,8 @@ TOOL_VALIDATORS: dict[str, _ValidatorFn] = {
     "simulator_examples": _validate_rag,
     "tracelink_docs": _validate_rag,
     "dscsa_regulations": _validate_rag,
-    PLOT_SUMMARY_TOOL: _validate_plot_summary,
-    PLOT_COMPARE_TOOL: _validate_plot_compare_full,
+    PLOT_SUMMARY_TOOL: _validate_plot_transportation_assignment,
+    PLOT_COMPARE_TOOL: _validate_plot_supply_chain_kpis,
     "run_flow_diagnostics": _validate_run_flow_diagnostics,
 }
 for _t in SIMULATION_INPUT_TOOLS:

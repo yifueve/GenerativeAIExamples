@@ -67,7 +67,6 @@ def is_waiting_for_approval(state: dict[str, Any]) -> bool:
     data_file = ((r.get("tool_input") or {}).get("data_file") or "").strip()
     needs = (
         (skill == "simulation_skill" and tool == "run_and_heal")
-        or (skill == "plot_skill")
         or (tool == "run_and_heal" and data_file and "_FIXED" in data_file.upper())
         or (skill == "results_skill" and tool == "run_flow_diagnostics")
     )

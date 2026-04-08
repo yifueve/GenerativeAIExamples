@@ -14,17 +14,17 @@
 # limitations under the License.
 
 """
-Scripts for OPM Plotting Skill
+Scripts for Supply Chain Plotting Skill
 
-Tool implementations for visualizing and comparing OPM Flow simulation results.
+Tool implementations for visualizing supply chain optimization and simulation results.
 """
 
 from .simulation_tools import (
-    plot_summary_metric,
-    plot_compare_summary_metric,
+    plot_transportation_assignment,
+    plot_supply_chain_kpis,
 )
 
 __all__ = [
-    "plot_summary_metric",
-    "plot_compare_summary_metric",
+    "plot_transportation_assignment",
+    "plot_supply_chain_kpis",
 ]

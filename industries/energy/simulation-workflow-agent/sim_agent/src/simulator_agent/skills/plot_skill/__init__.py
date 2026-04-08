@@ -14,31 +14,21 @@
 # limitations under the License.
 
 """
-OPM Plotting Skill for OPM Flow
+Supply Chain Plotting Skill
 
-This skill provides tools for visualizing and comparing OPM Flow simulation results.
-Follows the Agent Skills specification: https://agentskills.io/specification
-
-Structure:
-- SKILL.md: Skill metadata and instructions
-- test.py: Test suite
-- scripts/: Tool implementations (simulation_tools.py for plot tools)
-- references/: Additional documentation
-- assets/: Static resources
-
-Based on TOOL_DECISION_TREE.md Section 3.1 (Plot or compare results).
+This skill provides tools for visualizing supply chain optimization and simulation results.
 
 Tools:
-- plot_summary_metric: Plot one or more summary metrics from simulation outputs
-- plot_compare_summary_metric: Compare multiple cases on the same plot
+- plot_transportation_assignment: Network + bar chart of CFLP warehouse-to-customer flow assignments
+- plot_supply_chain_kpis: Multi-panel time series of disruption simulation KPIs
 """
 
 from .scripts.simulation_tools import (
-    plot_summary_metric,
-    plot_compare_summary_metric,
+    plot_transportation_assignment,
+    plot_supply_chain_kpis,
 )
 
 __all__ = [
-    "plot_summary_metric",
-    "plot_compare_summary_metric",
+    "plot_transportation_assignment",
+    "plot_supply_chain_kpis",
 ]

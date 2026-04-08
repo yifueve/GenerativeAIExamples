@@ -52,8 +52,8 @@ TOOL_TO_SKILL_MAP = {
     "stop_simulation": "simulation_skill",
     
     # Plot Skill
-    "plot_summary_metric": "plot_skill",
-    "plot_compare_summary_metric": "plot_skill",
+    "plot_transportation_assignment": "plot_skill",
+    "plot_supply_chain_kpis": "plot_skill",
     
     # Results Skill
     "read_simulation_summary": "results_skill",
@@ -278,10 +278,10 @@ If a query requires capabilities beyond these skills, you MUST use the "none" sk
 
 ### 2.5a Compare or plot with uploaded results
 **Condition:** User asks to plot or compare KPIs AND has uploaded .yaml or results JSON files. Use when user wants to compare existing scenario results without running first.
-**Tool chain:** plot_compare_summary_metric (when comparing 2+ cases) or plot_summary_metric (single case) → final_response
+**Tool chain:** plot_supply_chain_kpis (when comparing KPIs or multiple cases) or plot_transportation_assignment (CFLP flow assignment) → final_response
 **Examples:**
-- "Compare order fulfillment rate across scenarios" (with uploaded result files) → plot_compare_summary_metric → final_response
-- "Plot inventory days-on-hand" (with uploaded .yaml or results JSON) → plot_summary_metric → final_response
+- "Compare order fulfillment rate across scenarios" (with uploaded result files) → plot_supply_chain_kpis → final_response
+- "Plot inventory days-on-hand" (with uploaded .yaml or results JSON) → plot_supply_chain_kpis → final_response
 
 ### 2.5b Network diagnostics / "why" questions
 **Condition:** User asks "why" about supply chain behavior: stockouts, delays, low fill rates, compliance gaps, partner bottlenecks, supply path connectivity.
@@ -302,11 +302,11 @@ If a query requires capabilities beyond these skills, you MUST use the "none" sk
 ### 3.1 Plot or compare results
 **Condition:** User asks to plot or compare AND prior run_and_heal exists.
 **Tool chain:**
-- plot_summary_metric or plot_compare_summary_metric → final_response (no confirmation; user already asked to plot)
+- plot_supply_chain_kpis or plot_transportation_assignment → final_response (no confirmation; user already asked to plot)
 **Examples:**
-- "Plot the results" (no metric specified) → final_response only: ask user "Which KPI do you want to plot? Options: order_fulfillment_rate, inventory_doh_mean, shipment_delay_mean, compliance_rate, cost_per_unit, stockout_events". Do not assume a default metric.
-- "Plot order fulfillment rate" → plot_summary_metric (order_fulfillment_rate) → final_response
-- "Compare those two scenarios" → plot_compare_summary_metric → final_response
+- "Plot the results" (no metric specified) → final_response only: ask user "Which would you like? Transportation assignment (CFLP flows) or KPI time series (order_fulfillment_rate, inventory_doh_mean, etc.)". Do not assume a default.
+- "Plot order fulfillment rate" → plot_supply_chain_kpis (metrics=order_fulfillment_rate) → final_response
+- "Compare those two scenarios" → plot_supply_chain_kpis → final_response
 
 ### 3.2 Scenario test chain (continued)
 **Condition:** Last tool in scenario chain, continue automatically.
@@ -374,7 +374,7 @@ If a query requires capabilities beyond these skills, you MUST use the "none" sk
    - Direct run with no modification → run_and_heal (no confirm; confirm_before_run applies only to scenario test)
    - Config edit only (modify without run intent, including CFLP/optimization configs) → parse_simulation_input_file → modify_simulation_input_file → final_response (NO run_and_heal)
    - Scenario test (modify + explicit run/test/simulate intent) → parse_simulation_input_file → tracelink_docs → dscsa_regulations → (hitl_confirm_modify if confirm_before_modify=true) → modify_simulation_input_file → (hitl_confirm_run if confirm_before_run=true) → run_and_heal → final_response
-   - Plot/compare results → plot_summary_metric or plot_compare_summary_metric → final_response (no confirmation before plot)
+   - Plot/compare results → plot_transportation_assignment or plot_supply_chain_kpis → final_response (no confirmation before plot)
    - Documentation questions → tracelink_docs → (dscsa_regulations) → final_response
    - "Why" questions (stockouts, delays, compliance gaps, bottlenecks) with case path → run_flow_diagnostics → final_response. Do NOT refuse with "no simulation run" — use the tool; it validates files.
    - When diagnostics fails due to missing results, ask user if they want to run the scenario first. If user confirms → run_and_heal (Section 3.3b).
@@ -406,7 +406,7 @@ CRITICAL: For each step, you MUST include:
    - "rag_skill" (for tracelink_docs, dscsa_regulations)
    - "input_file_skill" (for parse_simulation_input_file, modify_simulation_input_file, patch_simulation_input_keyword)
    - "simulation_skill" (for run_and_heal, monitor_simulation, stop_simulation)
-   - "plot_skill" (for plot_summary_metric, plot_compare_summary_metric)
+   - "plot_skill" (for plot_transportation_assignment, plot_supply_chain_kpis)
    - "results_skill" (for read_simulation_summary, read_grid_properties, run_flow_diagnostics)
    - null (for hitl_confirm_run, hitl_confirm_modify, hitl_confirm_plot, hitl_apply_fix, final_response, none)
 
@@ -420,7 +420,7 @@ CRITICAL: For each step, you MUST include:
    - For tracelink_docs: "Retrieve documentation for the reorder_point parameter in OPUS scenario configs"
    - For modify_simulation_input_file: "Modify data/example_cases/supply_chain/drugY_NE.yaml: increase demand_mean for PHARM_NE from 500 to 700, output to drugY_NE_AGENT_GENERATED.yaml"
    - For run_and_heal: "Run scenario on the modified file (output from modify step) with background=False"
-   - For plot_summary_metric: "Plot order_fulfillment_rate KPI from output directory /path/to/output"
+   - For plot_supply_chain_kpis: "Plot order_fulfillment_rate KPI from results file /path/to/disruption_results.json"
    - For read_simulation_summary: "Read order_fulfillment_rate and inventory_doh_mean KPIs from scenario data/example_cases/supply_chain/drugY_NE.yaml"
    - For run_flow_diagnostics: "Run network diagnostics on data/example_cases/supply_chain/drugY_NE.yaml to identify bottleneck nodes"
 
@@ -888,7 +888,7 @@ CRITICAL RULES FOR "final_response":
 - Confirm before modify setting: {confirm_before_modify}
 - Uploaded files (absolute paths from UI): {uploaded_files}
 
-When the user has uploaded one or more files, treat them as available. For Section 2.3 (direct run): if the user says "run the simulation" (or similar run intent) and has uploaded a file with extension .DATA, route to run_and_heal — the DATA file path is the uploaded file. Do NOT use final_response with "cannot run without DATA file" when a .DATA file is in the uploaded list. For Section 2.5a (compare with uploaded results): if the user asks to "compare" or "plot" summary metrics and has uploaded .SMSPEC or .DATA files, route to plot_compare_summary_metric or plot_summary_metric — do NOT use final_response with "no simulation results" when uploaded files include results. For Section 2.5b (flow diagnostics): if the user asks about breakthrough, connectivity, flow paths, etc. and provides a case path (e.g. in the query or uploaded), route to run_flow_diagnostics — do NOT use final_response with "no simulation has been run" or "simulation must first be executed"; the simulation may have been run before this session.
+When the user has uploaded one or more files, treat them as available. For Section 2.3 (direct run): if the user says "run the simulation" (or similar run intent) and has uploaded a file with extension .DATA, route to run_and_heal — the DATA file path is the uploaded file. Do NOT use final_response with "cannot run without DATA file" when a .DATA file is in the uploaded list. For Section 2.5a (compare with uploaded results): if the user asks to "compare" or "plot" supply chain results and has uploaded results JSON files, route to plot_supply_chain_kpis or plot_transportation_assignment — do NOT use final_response with "no simulation results" when uploaded files include results. For Section 2.5b (flow diagnostics): if the user asks about breakthrough, connectivity, flow paths, etc. and provides a case path (e.g. in the query or uploaded), route to run_flow_diagnostics — do NOT use final_response with "no simulation has been run" or "simulation must first be executed"; the simulation may have been run before this session.
 
 ### User Query
 {user_input}
@@ -1064,7 +1064,19 @@ def query_decomposition_call(
             
             print(f"[WARNING] Error parsing query decomposition JSON response: {e}")
             print(f"Raw response: {raw_content[:500]}...")  # Truncate for logging
-            
+
+            # Try to salvage a truncated JSON array by closing open brackets
+            salvaged = raw_content.strip()
+            for closing in ("}]}", "}]}]", "}]"):
+                try:
+                    parsed_response = json.loads(salvaged + closing)
+                    if isinstance(parsed_response, list) and parsed_response:
+                        parsed_response = post_process_decomposition(parsed_response)
+                        print("[DEBUG] Recovered truncated JSON response")
+                        return parsed_response
+                except json.JSONDecodeError:
+                    continue
+
             # Fallback: Simple heuristics for fallback routing
             return _fallback_routing(user_input, has_tool_output, last_tool_name)
     
@@ -1179,16 +1191,24 @@ def _fallback_routing(
             ]
         }]
     
-    # Check for plot/compare requests (Section 3.1)
+    # Check for plot/compare requests (Section 2.5a / 3.1)
     plot_keywords = ["plot", "graph", "chart", "visualize"]
     compare_keywords = ["compare", "comparison"]
-    if any(kw in user_lower for kw in plot_keywords + compare_keywords) and has_tool_output:
-        tool_name = "plot_compare_summary_metric" if any(kw in user_lower for kw in compare_keywords) else "plot_summary_metric"
+    if any(kw in user_lower for kw in plot_keywords + compare_keywords):
+        kpi_keywords = compare_keywords + ["kpi", "fulfillment", "inventory", "delay", "disruption"]
+        tool_name = "plot_supply_chain_kpis" if any(kw in user_lower for kw in kpi_keywords) else "plot_transportation_assignment"
+        json_match = re.search(r'[\w./\-\\]+\.json', user_input, re.IGNORECASE)
+        results_file = json_match.group(0) if json_match else ""
+        sub_query = (
+            f"Plot supply chain results using results_file={results_file}" if results_file
+            else f"Plot supply chain results from user request: {user_input}"
+        )
         return [{
-            "multi_steps": True,
+            "multi_steps": False,
             "output_steps": [
-                {"step_nr": 1, "tool_name": tool_name, "skill_name": "plot_skill", "sub_query": f"Plot summary metrics from user request: {user_input}, using output directory from previous simulation", "rationale": "Fallback: Plot/compare request after run"},
-                {"step_nr": 2, "tool_name": "final_response", "skill_name": None, "sub_query": "Present the generated plot to the user", "rationale": "Fallback: Deliver plot"}
+                {"step_nr": 1, "tool_name": tool_name, "skill_name": "plot_skill",
+                 "sub_query": sub_query,
+                 "rationale": "Fallback: Plot request — route to plot_skill"}
             ]
         }]
     

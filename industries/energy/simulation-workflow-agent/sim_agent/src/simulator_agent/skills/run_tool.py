@@ -57,8 +57,8 @@ from simulator_agent.skills.simulation_skill import (
     stop_simulation,
 )
 from simulator_agent.skills.plot_skill import (
-    plot_compare_summary_metric,
-    plot_summary_metric,
+    plot_transportation_assignment,
+    plot_supply_chain_kpis,
 )
 
 # Tool list for agent wiring and standalone invocation
@@ -70,8 +70,8 @@ SIMULATION_TOOLS = [
     run_and_heal,
     monitor_simulation,
     stop_simulation,
-    plot_summary_metric,
-    plot_compare_summary_metric,
+    plot_transportation_assignment,
+    plot_supply_chain_kpis,
     read_simulation_summary,
     read_grid_properties,
     run_flow_diagnostics,

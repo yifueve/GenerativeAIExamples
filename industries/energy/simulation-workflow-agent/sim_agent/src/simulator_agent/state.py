@@ -57,6 +57,6 @@ SIMULATION_INPUT_TOOLS = {
     "modify_simulation_input_file",
     "patch_simulation_input_keyword",
 }
-PLOT_COMPARE_TOOL = "plot_compare_summary_metric"
-PLOT_SUMMARY_TOOL = "plot_summary_metric"
+PLOT_COMPARE_TOOL = "plot_supply_chain_kpis"
+PLOT_SUMMARY_TOOL = "plot_transportation_assignment"
 CHAT_HISTORY_MAX_TURNS = 3

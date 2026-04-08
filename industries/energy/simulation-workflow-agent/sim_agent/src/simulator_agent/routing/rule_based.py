@@ -26,10 +26,10 @@ def classify_query_rule_based(query: str) -> dict[str, Any]:
     q = (query or "").strip().lower()
     if "run" in q and ("scenario" in q or "simulation" in q or "yaml" in q or "supply chain" in q):
         return {"skill": "simulation_skill", "tool": "run_and_heal", "tool_input": {}}
-    if "plot" in q and "compare" in q:
-        return {"skill": "plot_skill", "tool": "plot_compare_summary_metric", "tool_input": {}}
+    if "plot" in q and ("kpi" in q or "compare" in q or "fulfillment" in q or "inventory" in q or "delay" in q):
+        return {"skill": "plot_skill", "tool": "plot_supply_chain_kpis", "tool_input": {}}
     if "plot" in q:
-        return {"skill": "plot_skill", "tool": "plot_summary_metric", "tool_input": {}}
+        return {"skill": "plot_skill", "tool": "plot_transportation_assignment", "tool_input": {}}
     if "parse" in q or "modify" in q or "validate" in q or "patch" in q:
         return {"skill": "input_file_skill", "tool": "parse_simulation_input_file", "tool_input": {}}
     if "docs" in q or "documentation" in q or "dscsa" in q or "compliance" in q or "regulation" in q or "search" in q:

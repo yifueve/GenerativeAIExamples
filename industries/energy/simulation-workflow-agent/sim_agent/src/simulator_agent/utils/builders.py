@@ -76,11 +76,15 @@ def _build_rag_input(sub_query: str, preferred: list[str]) -> dict[str, Any]:
 
 
 def _build_plot_input(sub_query: str, preferred: list[str]) -> dict[str, Any]:
-    data_file = extract_data_file_from_sub_query(sub_query)
-    if not data_file:
-        return {}
-    resolved = resolve_data_path(data_file, preferred_paths=preferred)
-    return {"output_dir": str(Path(resolved).parent)}
+    """Extract results_file (.json) from sub_query for supply chain plot tools."""
+    json_match = re.search(r'results_file=([\w./\-\\]+\.json)', sub_query, re.IGNORECASE)
+    if json_match:
+        return {"results_file": json_match.group(1)}
+    # Fallback: scan for any .json path in the sub_query
+    any_json = re.search(r'[\w./\-\\]+\.json', sub_query, re.IGNORECASE)
+    if any_json:
+        return {"results_file": any_json.group(0)}
+    return {}
 
 
 def _extract_time_step_ids_from_query(text: str) -> Optional[List[int]]:
@@ -122,8 +126,8 @@ _TOOL_INPUT_BUILDERS: dict[str, Callable[[str, list[str]], dict[str, Any]]] = {
     "simulator_examples": _build_rag_input,
     "tracelink_docs": _build_rag_input,
     "dscsa_regulations": _build_rag_input,
-    PLOT_SUMMARY_TOOL: _build_plot_input,
-    PLOT_COMPARE_TOOL: _build_plot_input,
+    PLOT_SUMMARY_TOOL: _build_plot_input,   # plot_transportation_assignment
+    PLOT_COMPARE_TOOL: _build_plot_input,   # plot_supply_chain_kpis
     "run_flow_diagnostics": _build_run_flow_diagnostics_input,
 }
 
