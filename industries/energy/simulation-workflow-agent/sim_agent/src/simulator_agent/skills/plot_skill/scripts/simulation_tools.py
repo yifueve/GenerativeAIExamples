@@ -671,11 +671,15 @@ _KPI_LABELS = {
 
 # Node type colors for transportation network
 _NODE_COLORS = {
-    "MFG": "#1f77b4",   # blue  – manufacturer
-    "DC":  "#ff7f0e",   # orange – distribution centre
-    "W":   "#ff7f0e",   # orange – warehouse (CFLP)
-    "C":   "#2ca02c",   # green  – customer / pharmacy
-    "PHARM": "#2ca02c", # green
+    "MFG":   "#1f77b4",   # blue   – manufacturer
+    "DC":    "#ff7f0e",   # orange – distribution centre
+    "W":     "#ff7f0e",   # orange – warehouse (CFLP)
+    "C":     "#2ca02c",   # green  – customer / pharmacy
+    "PHARM": "#2ca02c",   # green
+    # Battery critical minerals
+    "MINE":  "#8c564b",   # brown  – mining source
+    "REF":   "#17becf",   # teal   – refinery / processing hub
+    "GIGA":  "#e377c2",   # pink   – battery gigafactory
 }
 
 

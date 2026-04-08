@@ -2,6 +2,8 @@
 # Drug Y distribution across NE, Midwest, and West regions
 # Tracelink supply chain disruption response scenario
 
+scenario_title: "Drug Y Supply Chain Disruption Response Agent for TraceLink"
+
 paths:
   sim_dir_base: "dataset/CFLP"
   case_name: "CFLP_DrugY"

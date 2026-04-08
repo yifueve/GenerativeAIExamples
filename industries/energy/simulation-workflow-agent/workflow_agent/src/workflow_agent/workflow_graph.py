@@ -84,6 +84,9 @@ class WorkflowState(TypedDict, total=False):
     experiment_name: str
     experiment_dir: str
 
+    # Metadata
+    scenario_title: str
+
     # Control
     should_continue: bool
     phase: str  # "initial" | "iterate" | "final" | "done"
@@ -365,9 +368,11 @@ def update_best_and_continue(state: WorkflowState) -> Dict[str, Any]:
 
 def final_report(state: WorkflowState) -> Dict[str, Any]:
     """Generate final report."""
-    _console.print("[bold cyan]Generating final report[/bold cyan]...")
+    scenario_title = state.get("scenario_title") or "Agentic Workflow"
+    _console.print(f"[bold cyan]Generating final report[/bold cyan] — {scenario_title}...")
     experiment_dir = state.get("experiment_dir", "")
     report = {
+        "scenario_title": scenario_title,
         "experiment_dir": experiment_dir,
         "execution_mode": state.get("execution_mode", "serial"),
         "total_iterations": len(state.get("all_solutions", [])),

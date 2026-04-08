@@ -1,0 +1,133 @@
+# Supply Chain Optimization — Capacitated Facility Location Problem (CFLP)
+# DOE Critical Minerals: Battery Materials (Lithium, Cobalt, Nickel)
+#
+# Problem: Determine which strategic mineral processing/distribution hubs to open
+# and how to allocate supply to US battery gigafactories to minimize total cost.
+#
+# Units: metric tons LCE (Lithium Carbonate Equivalent) per planning period
+# Regions served: Southwest, Pacific Northwest, Southeast, Midwest, Northeast
+#
+# Candidate hub locations reflect current/planned US domestic refining capacity
+# (DOE critical minerals strategy — onshoring supply chain per IRA incentives).
+
+scenario_title: "Battery Mineral Material Supply Chain Simulation Agent"
+
+paths:
+  sim_dir_base: "dataset/CFLP"
+  case_name: "CFLP_BatteryMinerals"
+  template: "dataset/CFLP/TEMPLATE/cflp.yaml"
+
+algorithm:
+  type: "CFLP"
+
+# ---------------------------------------------------------------------------
+# Candidate warehouse / processing hub locations
+# ---------------------------------------------------------------------------
+warehouses:
+  - id: W_Nevada
+    location: "Thacker Pass, NV (Lithium Americas)"
+    capacity: 1800                   # metric tons LCE per period
+    fixed_cost: 42000                # $K — includes refinery CAPEX amortization
+
+  - id: W_Texas
+    location: "Corpus Christi, TX (port + rail hub)"
+    capacity: 1400
+    fixed_cost: 31000
+
+  - id: W_Michigan
+    location: "Holland, MI (automotive corridor)"
+    capacity: 1200
+    fixed_cost: 27000
+
+  - id: W_Georgia
+    location: "Savannah, GA (port + SE industrial)"
+    capacity: 1100
+    fixed_cost: 24000
+
+  - id: W_Arizona
+    location: "Phoenix, AZ (Sun Belt EV corridor)"
+    capacity: 900
+    fixed_cost: 21000
+
+  - id: W_Washington
+    location: "Tacoma, WA (Pacific Rim port)"
+    capacity: 800
+    fixed_cost: 19000
+
+# ---------------------------------------------------------------------------
+# Customer demand nodes — battery gigafactories by region
+# ---------------------------------------------------------------------------
+customers:
+  - id: C_SW                         # Southwest — Nevada Tesla Gigafactory + AZ expansions
+    location: "Southwest Region (NV/AZ)"
+    demand: 680
+
+  - id: C_Pacific                    # Pacific Northwest — WA/OR battery plants
+    location: "Pacific Northwest (WA/OR)"
+    demand: 420
+
+  - id: C_SE                         # Southeast — GA Rivian, TN/KY SK Innovation, NC Toyota
+    location: "Southeast Region (GA/TN/NC)"
+    demand: 780
+
+  - id: C_Midwest                    # Midwest — MI Ford BlueOval, OH Honda-LG, IN Samsung SDI
+    location: "Midwest Region (MI/OH/IN)"
+    demand: 860
+
+  - id: C_NE                         # Northeast — NY/MA emerging battery tech clusters
+    location: "Northeast Region (NY/MA)"
+    demand: 310
+
+# ---------------------------------------------------------------------------
+# Unit transport cost: warehouse → customer ($/metric ton LCE)
+# Costs reflect distance, mode (rail preferred), and hazmat handling
+# ---------------------------------------------------------------------------
+transport_costs:
+  # W_Nevada → customers
+  W_Nevada_C_SW: 48
+  W_Nevada_C_Pacific: 95
+  W_Nevada_C_SE: 285
+  W_Nevada_C_Midwest: 310
+  W_Nevada_C_NE: 420
+
+  # W_Texas → customers
+  W_Texas_C_SW: 190
+  W_Texas_C_Pacific: 380
+  W_Texas_C_SE: 165
+  W_Texas_C_Midwest: 240
+  W_Texas_C_NE: 330
+
+  # W_Michigan → customers
+  W_Michigan_C_SW: 380
+  W_Michigan_C_Pacific: 510
+  W_Michigan_C_SE: 210
+  W_Michigan_C_Midwest: 65
+  W_Michigan_C_NE: 145
+
+  # W_Georgia → customers
+  W_Georgia_C_SW: 310
+  W_Georgia_C_Pacific: 490
+  W_Georgia_C_SE: 55
+  W_Georgia_C_Midwest: 195
+  W_Georgia_C_NE: 220
+
+  # W_Arizona → customers
+  W_Arizona_C_SW: 70
+  W_Arizona_C_Pacific: 160
+  W_Arizona_C_SE: 270
+  W_Arizona_C_Midwest: 340
+  W_Arizona_C_NE: 450
+
+  # W_Washington → customers
+  W_Washington_C_SW: 175
+  W_Washington_C_Pacific: 45
+  W_Washington_C_SE: 440
+  W_Washington_C_Midwest: 490
+  W_Washington_C_NE: 530
+
+objective:
+  mode: "min_cost"
+
+output:
+  save_log: true
+  save_plots: false

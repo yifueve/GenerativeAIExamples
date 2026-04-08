@@ -93,15 +93,19 @@ class AgenticWorkflow:
             "execution_mode": self.execution_mode,
             "experiment_name": experiment.name,
             "experiment_dir": str(experiment.path),
+            "scenario_title": base_config.get("scenario_title", ""),
             "all_solutions": [],
             "best_solution": None,
             "total_simulations": 0,
             "phase": "initial",
         }
 
+        scenario_title = base_config.get(
+            "scenario_title", "Agentic Workflow (LangGraph)"
+        )
         console.print(
             Panel.fit(
-                f"[bold green]Agentic Workflow (LangGraph)[/bold green]\n"
+                f"[bold green]{scenario_title}[/bold green]\n"
                 f"Experiment: {experiment.name}\n"
                 f"Mode: {self.execution_mode.upper()}",
                 title="🤖 Starting",

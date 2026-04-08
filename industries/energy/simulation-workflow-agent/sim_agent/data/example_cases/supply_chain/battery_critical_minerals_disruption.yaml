@@ -1,0 +1,198 @@
+# DOE Critical Minerals Supply Chain Scenario — Battery Materials
+# Models multi-echelon supply chain for lithium, cobalt, and nickel
+# (aggregated as Lithium Carbonate Equivalent, LCE) from mining sites
+# through US refineries to battery gigafactories.
+#
+# Critical minerals context (DOE): ~50 minerals designated critical due to
+# supply risk and importance to clean-energy technology. Lithium, cobalt,
+# and nickel are the three highest-volume battery minerals.
+#
+# Network topology (units = metric tons LCE per week):
+#   MINE_CHILE, MINE_AUSTRALIA  →  REF_US_WEST, REF_US_EAST
+#   REF_US_WEST  →  GIGA_SW, GIGA_PACIFIC
+#   REF_US_EAST  →  GIGA_SE, GIGA_MIDWEST
+#
+# Disruptions modeled:
+#   1. Supplier shortage at MINE_CHILE (labor strike, weeks 5–11)
+#   2. Port congestion on Australia→US West lane (Pacific backlog, weeks 8–12)
+#   3. Demand spike at GIGA_SW (new EV model ramp-up, weeks 10–18)
+
+scenario:
+  name: "BatteryCriticalMinerals_DOE_Disruption"
+  horizon_days: 182        # 26 weeks
+  time_step_days: 7        # weekly review cycle
+
+products:
+  - id: LCE                         # Lithium Carbonate Equivalent (aggregate proxy)
+    unit_cost: 14500.00             # $/metric ton (blended Li/Co/Ni equivalent)
+    holding_cost_per_unit_day: 12.00  # storage cost (temperature-controlled)
+    shortage_cost_per_unit: 85000.00  # high penalty — gigafactory line-stop cost
+
+# ---------------------------------------------------------------------------
+# Tier 1 — Mining sources
+# ---------------------------------------------------------------------------
+nodes:
+  - id: MINE_CHILE
+    type: manufacturer
+    production_capacity: 420         # metric tons LCE per week (Atacama brine)
+    storage_capacity: 4000
+    initial_inventory: 1200
+
+  - id: MINE_AUSTRALIA
+    type: manufacturer
+    production_capacity: 280         # metric tons LCE per week (hard-rock spodumene)
+    storage_capacity: 3000
+    initial_inventory: 900
+
+# ---------------------------------------------------------------------------
+# Tier 2 — US refining / processing hubs
+# ---------------------------------------------------------------------------
+  - id: REF_US_WEST
+    type: distribution_center
+    storage_capacity: 2500
+    initial_inventory: 600
+    reorder_point: 350
+    order_quantity: 500
+
+  - id: REF_US_EAST
+    type: distribution_center
+    storage_capacity: 2000
+    initial_inventory: 450
+    reorder_point: 280
+    order_quantity: 400
+
+# ---------------------------------------------------------------------------
+# Tier 3 — Battery gigafactories (end consumers)
+# ---------------------------------------------------------------------------
+  - id: GIGA_SW                      # Southwest US — Nevada/Arizona corridor
+    type: pharmacy
+    demand_mean: 110.0               # metric tons LCE per week
+    demand_std: 12.0
+    initial_inventory: 220
+    reorder_point: 140
+    order_quantity: 220
+    dscsa_compliance_rate: 0.99      # mineral traceability / chain-of-custody
+
+  - id: GIGA_PACIFIC                 # Pacific Northwest — Washington state
+    type: pharmacy
+    demand_mean: 85.0
+    demand_std: 10.0
+    initial_inventory: 170
+    reorder_point: 100
+    order_quantity: 170
+    dscsa_compliance_rate: 0.98
+
+  - id: GIGA_SE                      # Southeast US — Georgia / Tennessee
+    type: pharmacy
+    demand_mean: 130.0
+    demand_std: 15.0
+    initial_inventory: 260
+    reorder_point: 160
+    order_quantity: 260
+    dscsa_compliance_rate: 0.99
+
+  - id: GIGA_MIDWEST                 # Midwest — Michigan / Ohio (legacy auto corridor)
+    type: pharmacy
+    demand_mean: 100.0
+    demand_std: 11.0
+    initial_inventory: 200
+    reorder_point: 120
+    order_quantity: 200
+    dscsa_compliance_rate: 0.97
+
+# ---------------------------------------------------------------------------
+# Transportation lanes
+# ---------------------------------------------------------------------------
+lanes:
+  # Tier 1 → Tier 2 (intercontinental + domestic rail/truck)
+  - id: MINE_CHILE_to_REF_US_WEST
+    from: MINE_CHILE
+    to: REF_US_WEST
+    lead_time_steps: 4               # ~4 weeks (ocean freight + port processing)
+    transport_cost_per_unit: 380.00
+
+  - id: MINE_CHILE_to_REF_US_EAST
+    from: MINE_CHILE
+    to: REF_US_EAST
+    lead_time_steps: 5               # 5 weeks (longer routing via Panama Canal)
+    transport_cost_per_unit: 420.00
+
+  - id: MINE_AUSTRALIA_to_REF_US_WEST
+    from: MINE_AUSTRALIA
+    to: REF_US_WEST
+    lead_time_steps: 3               # ~3 weeks (trans-Pacific)
+    transport_cost_per_unit: 310.00
+
+  - id: MINE_AUSTRALIA_to_REF_US_EAST
+    from: MINE_AUSTRALIA
+    to: REF_US_EAST
+    lead_time_steps: 5               # 5 weeks (via Suez or around Cape)
+    transport_cost_per_unit: 490.00
+
+  # Tier 2 → Tier 3 (domestic rail/truck)
+  - id: REF_US_WEST_to_GIGA_SW
+    from: REF_US_WEST
+    to: GIGA_SW
+    lead_time_steps: 1
+    transport_cost_per_unit: 55.00
+
+  - id: REF_US_WEST_to_GIGA_PACIFIC
+    from: REF_US_WEST
+    to: GIGA_PACIFIC
+    lead_time_steps: 1
+    transport_cost_per_unit: 45.00
+
+  - id: REF_US_EAST_to_GIGA_SE
+    from: REF_US_EAST
+    to: GIGA_SE
+    lead_time_steps: 1
+    transport_cost_per_unit: 40.00
+
+  - id: REF_US_EAST_to_GIGA_MIDWEST
+    from: REF_US_EAST
+    to: GIGA_MIDWEST
+    lead_time_steps: 1
+    transport_cost_per_unit: 60.00
+
+  # Cross-refinery backup routes (higher cost, used when primary refinery is stressed)
+  - id: REF_US_WEST_to_GIGA_MIDWEST
+    from: REF_US_WEST
+    to: GIGA_MIDWEST
+    lead_time_steps: 2
+    transport_cost_per_unit: 130.00
+
+  - id: REF_US_EAST_to_GIGA_SW
+    from: REF_US_EAST
+    to: GIGA_SW
+    lead_time_steps: 2
+    transport_cost_per_unit: 150.00
+
+# ---------------------------------------------------------------------------
+# Disruption scenarios
+# ---------------------------------------------------------------------------
+disruptions:
+  # 1. Chile mine labor strike — 40% production reduction for 7 weeks
+  - type: supplier_shortage
+    start_step: 4                    # starts week 5
+    end_step: 10                     # lasts through week 11
+    affected_node: MINE_CHILE
+    capacity_reduction: 0.40         # 40% capacity loss
+
+  # 2. Pacific port congestion (Long Beach / LA) — delays Australia shipments
+  - type: port_congestion
+    start_step: 7                    # starts week 8
+    end_step: 11                     # lasts through week 12
+    affected_lane: MINE_AUSTRALIA_to_REF_US_WEST
+    lead_time_delay_steps: 2         # adds 2 weeks transit delay
+
+  # 3. SW gigafactory demand spike — new EV model production ramp-up
+  - type: demand_spike
+    start_step: 9                    # starts week 10
+    end_step: 17                     # lasts through week 18
+    affected_node: GIGA_SW
+    demand_multiplier: 1.65          # 65% demand increase during ramp
+
+output:
+  save_results: true
+  results_dir: "results"
+  random_seed: 42
