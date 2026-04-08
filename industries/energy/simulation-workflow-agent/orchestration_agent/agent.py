@@ -286,7 +286,7 @@ def _run_orchestrator_interactive(
 ) -> int:
     """Run orchestrator-level interactive loop: route each query via LLM."""
     print("=" * 60, file=sys.stderr)
-    print("  Supply Chain Disruption Response Agent for TRACELINK", file=sys.stderr)
+    print("  Battery Mineral Material Supply Chain Simulation Agent", file=sys.stderr)
     print("=" * 60, file=sys.stderr)
     print("Type your query and press Enter. Commands: 'quit' or 'exit' to stop.", file=sys.stderr)
     print("-" * 60, file=sys.stderr)

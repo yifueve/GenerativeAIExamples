@@ -10,7 +10,7 @@
 # Candidate hub locations reflect current/planned US domestic refining capacity
 # (DOE critical minerals strategy — onshoring supply chain per IRA incentives).
 
-scenario_title: "Battery Mineral Material Supply Chain Simulation Agent"
+scenario_title: "Battery Mineral Material Supply Chain Simulation"
 
 paths:
   sim_dir_base: "dataset/CFLP"

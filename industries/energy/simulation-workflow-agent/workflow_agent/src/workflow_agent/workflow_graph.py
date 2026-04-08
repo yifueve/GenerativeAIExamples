@@ -111,8 +111,7 @@ def _get_executor(workflow_config: Dict[str, Any]) -> WorkflowExecutor:
 
 def initial_analysis(state: WorkflowState) -> Dict[str, Any]:
     """Phase 1: reservoir analysis, knowledge retrieval, strategy proposal, critique."""
-    _console.print("[bold cyan]Phase 1:[/bold cyan] Detect anomaly signal + inventory...")
-    _console.print("  query_partner_inventory(region=NE, drug=Y)")
+
     base_config = state["base_config"]
     workflow_config = state["workflow_config"]
     team = _get_team(workflow_config)
@@ -163,8 +162,6 @@ def evolve_strategy(state: WorkflowState) -> Dict[str, Any]:
             _console.print(f"[bold cyan]Iteration {iteration}:[/bold cyan] Check port congestion...")
         else:
             _console.print(f"[bold cyan]Iteration {iteration}:[/bold cyan] Evolving strategy...")
-        if iteration == 1:
-            _console.print("  Port congestion in LA, Partner_A has excess, Partner_C will face shortage in 3 days")
     execution_mode = state.get("execution_mode", "serial")
     workflow_config = state["workflow_config"]
     team = _get_team(workflow_config)

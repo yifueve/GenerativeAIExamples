@@ -66,9 +66,10 @@ def run_cflp(config_path: str) -> None:
     print(f"\n{'='*60}")
     print("STARTING SUPPLY CHAIN OPTIMIZATION (CFLP)")
     print(f"{'='*60}\n")
+    scenario_title = cfg.get("scenario_title", "Supply Chain Optimization")
+    print(f"  Scenario   : {scenario_title}")
     print(f"  Warehouses : {[w['id'] for w in warehouses]}")
-    print(f"  Customers  : {[c['id'] for c in customers]}")
-    print(f"  Drug       : Y  |  Region focus: NE\n")
+    print(f"  Customers  : {[c['id'] for c in customers]}\n")
 
     result = solve_cflp(cfg)
     print_cflp_results(result, warehouses, customers)
